@@ -1,4 +1,4 @@
-# RootlessViPER4Android engine (Magisk module)
+# RootfulViPER4Android engine (Magisk module)
 
 Installs this fork's DSP engine as a **system-wide audio effect**.
 
