@@ -83,10 +83,18 @@ if [ "$HAS_AIDL" = "1" ]; then
   ui_print "  effect does not appear, the AIDL HAL is the one in use."
 fi
 
+# A 64-bit device gets the 32-bit build as well. The audio server, or on
+# Android 8 and later the vendor audio HAL that actually loads effects, is not
+# necessarily 64-bit just because the device is: plenty of Snapdragon devices
+# run a 32-bit audio HAL, and a 32-bit process looks only in lib/soundfx. With
+# only the 64-bit library installed it found nothing there and skipped the
+# engine without a word, which is how an LG V40 ended up with a valid config,
+# a library in lib64, and no effect registered.
+COMPAT_ABI=""
 case "$ARCH" in
-  arm64) ABI_DIR="arm64-v8a";   LIBDIR="lib64" ;;
+  arm64) ABI_DIR="arm64-v8a";   LIBDIR="lib64"; COMPAT_ABI="armeabi-v7a" ;;
   arm)   ABI_DIR="armeabi-v7a"; LIBDIR="lib"   ;;
-  x64)   ABI_DIR="x86_64";      LIBDIR="lib64" ;;
+  x64)   ABI_DIR="x86_64";      LIBDIR="lib64"; COMPAT_ABI="x86" ;;
   x86)   ABI_DIR="x86";         LIBDIR="lib"   ;;
   *)     abort "! Unsupported architecture: $ARCH" ;;
 esac
@@ -106,21 +114,34 @@ SO="$MODPATH/libs/$ABI_DIR/libjamesdsp.so"
 # system_lib_file is the type that actually describes the file. It does not
 # exist before Android 10, so ask for it only where it exists and fall back
 # rather than leaving set_perm to fail unnoticed.
-for D in "$MODPATH/system/$LIBDIR/soundfx" "$MODPATH/system/vendor/$LIBDIR/soundfx"; do
-  mkdir -p "$D"
-  cp "$SO" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
-  set_perm "$D" 0 0 0755
-  if [ "$API" -ge 29 ]; then
-    set_perm "$D/libjamesdsp.so" 0 0 0644 u:object_r:system_lib_file:s0 ||
+install_engine() {
+  for D in "$MODPATH/system/$2/soundfx" "$MODPATH/system/vendor/$2/soundfx"; do
+    mkdir -p "$D"
+    cp "$1" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
+    set_perm "$D" 0 0 0755
+    if [ "$API" -ge 29 ]; then
+      set_perm "$D/libjamesdsp.so" 0 0 0644 u:object_r:system_lib_file:s0 ||
+        set_perm "$D/libjamesdsp.so" 0 0 0644 ||
+        ui_print "! Could not set permissions on $D/libjamesdsp.so"
+    else
       set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
-  else
-    set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
-  fi
-done
-rm -rf "$MODPATH/libs"
+        ui_print "! Could not set permissions on $D/libjamesdsp.so"
+    fi
+  done
+}
+
+install_engine "$SO" "$LIBDIR"
 ui_print "- Engine installed to $LIBDIR/soundfx"
+if [ -n "$COMPAT_ABI" ]; then
+  if [ -f "$MODPATH/libs/$COMPAT_ABI/libjamesdsp.so" ]; then
+    install_engine "$MODPATH/libs/$COMPAT_ABI/libjamesdsp.so" lib
+    ui_print "- 32-bit engine installed to lib/soundfx"
+  else
+    ui_print "! No $COMPAT_ABI build in this package; a 32-bit audio HAL"
+    ui_print "  will not find the engine"
+  fi
+fi
+rm -rf "$MODPATH/libs"
 
 . "$MODPATH/common/patch_audio_config.sh"
 
