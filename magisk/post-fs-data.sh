@@ -89,13 +89,17 @@ find_disabled() {
   touch "$MARK" || echo "WARNING: could not write the boot marker; watchdog is off"
 
   # --- 2b. has the system been updated under us? ------------------------
-  # This runs before our files are mounted, so the config read here is the
-  # device's own, not our copy of it.
-  if [ -f "$MODDIR/.source_config" ]; then
+  # Compared with our own entries stripped, exactly as the install measured
+  # it, so the answer does not depend on whether the file read is the
+  # device's own or a copy of ours that happens to be mounted over it. Sourced
+  # in a subshell: that file has its own find_configs, which would otherwise
+  # replace ours and point validation and quarantine at the device's files.
+  if [ -f "$MODDIR/.source_config" ] && [ -f "$MODDIR/common/patch_audio_config.sh" ]; then
     read -r src osize olines < "$MODDIR/.source_config"
     if [ -n "$src" ] && [ -f "$src" ]; then
-      nsize=$(wc -c < "$src" 2>/dev/null || echo 0)
-      nlines=$(wc -l < "$src" 2>/dev/null || echo 0)
+      read -r nsize nlines <<EOF
+$( . "$MODDIR/common/patch_audio_config.sh" && source_fingerprint "$src" 2>/dev/null || echo "0 0")
+EOF
       if [ "$nsize" != "$osize" ] || [ "$nlines" != "$olines" ]; then
         echo "SOURCE CONFIG CHANGED: $src was $osize bytes/$olines lines, now $nsize/$nlines"
         echo "the system has probably been updated; our overlay is stale"

@@ -79,6 +79,16 @@ strip_ours() {
   esac
 }
 
+# Size and line count of a config with our own entries taken out, which is the
+# device's config whether $1 is the real file or our patched copy mounted over
+# it. Measuring the file as-is recorded our previous install's output whenever
+# the module was reinstalled over itself, and post-fs-data, which reads the
+# real file before anything is mounted, then found it 146 bytes short, called
+# it a system update and rejected a perfectly good config on every boot.
+source_fingerprint() {
+  echo "$(strip_ours "$1" | wc -c) $(strip_ours "$1" | wc -l)"
+}
+
 validate_xml() {
   grep -q "$EFFECT_UUID" "$1" &&
   grep -q "name=\"$LIB_NAME\"" "$1" &&
@@ -175,7 +185,7 @@ patch_audio_config() {
       # ones it removed would come back pointing at libraries that no longer
       # exist. Nothing else here would notice, because our own entries are
       # still perfectly well formed.
-      echo "$cfg $(wc -c < "$cfg") $(wc -l < "$cfg")" > "$MODPATH/.source_config"
+      echo "$cfg $(source_fingerprint "$cfg")" > "$MODPATH/.source_config"
       found=1
       # One config is what the loader reads. Patching every candidate we can
       # find multiplies the chance of a duplicate registration for no gain.
