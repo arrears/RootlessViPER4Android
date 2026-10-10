@@ -338,6 +338,9 @@ static const int jdspDefaultChain[] =
 	JDSP_EFX_TRANSIENT,
 	JDSP_EFX_DIFFSURROUND, JDSP_EFX_BASSBOOST, JDSP_EFX_VDYNBASS,
 	JDSP_EFX_VIPERBASS, JDSP_EFX_BASSEX,
+	// Damon DSP's bass block sits with the other bass processors until the
+	// Feature 16 chain builder lands its own default order.
+	JDSP_EFX_SUBHARMONIC,
 	// Tidy the bottom after the bass processors have had their say, then add
 	// harmonics to what is left.
 	JDSP_EFX_LOWEND, JDSP_EFX_EXCITER,
@@ -601,6 +604,14 @@ static void jdspDispatchEffect(JamesDSPLib *jdsp, int id, size_t n)
 	case JDSP_EFX_BALANCE:
 		jdsp_lock(jdsp);
 		if (jdsp->balanceEnabled) BalanceProcess(jdsp, n);
+		jdsp_unlock(jdsp);
+		break;
+	case JDSP_EFX_SUBHARMONIC:
+		/* The block runs its split once around every bass stage that is on;
+		   the sub-harmonic generator is the first of them. Its buffers are
+		   swapped from the control thread, hence the lock. */
+		jdsp_lock(jdsp);
+		if (BassBlockActive(jdsp)) BassBlockProcess(jdsp, n);
 		jdsp_unlock(jdsp);
 		break;
 	default:
@@ -1565,6 +1576,10 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	jdsp->lowEndEnabled = 0;
 	// Rumble gone, a little body added, the thick region eased back.
 	LowEndSetParam(jdsp, 30.0f, 90.0f, 3.0f, 300.0f, -2.5f, 100.0f);
+	jdsp->subHarmonicEnabled = 0;
+	// The brief's defaults: -12 dB, listening across about 50 to 120 Hz,
+	// following the bass note by note.
+	SubHarmonicSetParam(jdsp, -12.0f, 77.0f, 1.25f, 1);
 	TransientSetParam(jdsp, 200.0f, 3000.0f,
 		45.0f, -20.0f,
 		30.0f, -15.0f,
@@ -1715,10 +1730,13 @@ void JamesDSPSetSampleRate(JamesDSPLib *jdsp, float new_sample_rate, int forceRe
 	VinylRefresh(jdsp);
 	BalanceRefresh(jdsp);
 	PitchShiftRefresh(jdsp);
+	SubHarmonicRefresh(jdsp);
+	BassBlockRefresh(jdsp);
 	jdsp_unlock(jdsp);
 }
 void JamesDSPReleaseEffectBuffers(JamesDSPLib *jdsp)
 {
+	SubHarmonicDisable(jdsp);
 	EchoDelayDisable(jdsp);
 	MultibandDistDisable(jdsp);
 	MaximizerDisable(jdsp);

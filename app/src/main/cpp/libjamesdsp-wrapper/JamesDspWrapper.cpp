@@ -640,6 +640,16 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setExciter(JNIE
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setSubHarmonic(JNIEnv *env, jobject obj, jlong self,
+        jboolean enable, jfloat mixDb, jfloat sweepHz, jfloat wideOct, jboolean dynamic)
+{
+    DECLARE_DSP_B
+    SubHarmonicSetParam(dsp, mixDb, sweepHz, wideOct, dynamic ? 1 : 0);
+    if (enable) SubHarmonicEnable(dsp); else SubHarmonicDisable(dsp);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setLowEnd(JNIEnv *env, jobject obj, jlong self,
         jboolean enable, jfloat subsonic, jfloat weightHz, jfloat weightDb,
         jfloat mudHz, jfloat mudDb, jfloat mix)

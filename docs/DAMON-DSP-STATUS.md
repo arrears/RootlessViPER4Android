@@ -16,8 +16,8 @@ EQ, Spectrum Extension or Playback Gain Control.
 | Step | Status | Notes |
 |---|---|---|
 | Project rename to Damon DSP | Done (v4.1.0) | See below for exactly what changed and what was deliberately kept |
-| Feature 1: Sub-harmonic generator | Not started | Needs chain-placement confirmation first |
-| Feature 2: Adaptive bass controller | Not started | |
+| Feature 1: Sub-harmonic generator | Done (v4.1.0) | Placement confirmed: inside the bass block, with the other bass processors. See below |
+| Feature 2: Adaptive bass controller | Not started | Runs inside the same bass block; drives a low shelf on the low band and Feature 1's Mix |
 | Feature 3: Dolby-alike mode | Not started | Research public Dolby Atmos / DAX modules and open Dolby-alike DSP projects; no old V40 module zip |
 | Feature 16: Chain builder | Not started | Replaces the fixed order with a chain description read at init |
 | Features 4 to 15 | Not started | In numbered order after 16 |
@@ -65,3 +65,49 @@ EQ, Spectrum Extension or Playback Gain Control.
   when Damon renames it.
 - No status strip exists yet; it arrives with Feature 4 and will be named
   for Damon DSP from the start.
+
+## Feature 1: Sub-harmonic generator
+
+Card "Sub-harmonic generator" (preference namespace `dsp_subharmonic`, chain
+id 39, HAL parameter ids 26022 / 26122). Controls: Mix (-40 to 0 dB, default
+-12; the bottom of the slider is off), Sweep (band centre, 30 to 160 Hz,
+default 77), Wide (band width in octaves, 0.5 to 3, default 1.25, so the
+default band is about 50 to 120 Hz), Dynamic (default on).
+
+What was built:
+
+- `Effects/bassblock.c`: the shared split every bass stage runs inside. One
+  Kaiser-windowed linear-phase FIR low-pass at 120 Hz (-6 dB there, 60 dB
+  down by 160 Hz), FFT-partitioned through the engine's own convolver. The
+  dry signal is delayed by the filter's group delay, so at neutral the block
+  is a bit-exact delay. Stages return what they ADD to the low band; the dry
+  signal is never altered. The addition goes through a lookahead gain dip
+  (4 ms lookahead, sliding-window minimum, 150 ms release) against a ceiling
+  2% under the master limiter's threshold, so bass alone never reaches the
+  limiter. Allocated when the first stage is enabled, freed when the last is
+  disabled, redesigned on every sample-rate change. Latency 26.6 ms at every
+  rate; `BassBlockLatency()` reports it for the later video sync mode.
+- `Effects/subharmonic.c`: detector band-pass (4th-order Butterworth edges,
+  double precision) on the mono low band; rising zero crossings timed to a
+  fraction of a sample give the period, the peak of each cycle gives the
+  amplitude; an oscillator at half the frequency is phase-locked by nudging
+  its frequency over the next cycle (no phase steps, no three-halves
+  product); output low-passed at 80 Hz, 8th order. Dynamic mode follows the
+  cycle peaks; static mode follows an 80 ms / 600 ms average of them. A note
+  outside the band (by period) gets no sub at all.
+- Both engine paths: JNI `setSubHarmonic` (rootless) and HAL ids (rooted).
+- Chain order dialog now also lists Vinyl and Balance, which were missing.
+
+Verified by `tools/subharmonic_harness.c` at 44.1, 48 and 192 kHz with 192,
+1024 and 4096-sample blocks: neutral is bit-exact, a 100 Hz note grows a
+50 Hz sub at about -14 dB with nothing at 150, 200 or 300 Hz, the null
+against bypass at 240 Hz and above at full mix is within 0.01 dB (brief asks
+0.5 dB), a hot 60 Hz note with a full sub peaks at 0.98, and the delay in
+milliseconds is the same at 48 and 192 kHz. `tools/chain_harness.c` proves
+the new stage is dispatched even from a saved chain order that predates it.
+
+Left for listening on the Redmi Note 10 Pro: defaults (Mix, band, the 80 Hz
+low-pass) are the brief's and will want tuning by ear. Not yet done:
+exposing the current Mix and the bass-band meters for the Feature 5
+visualiser, and the minimum-phase swap for Feature 12.
+

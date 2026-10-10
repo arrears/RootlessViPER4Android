@@ -214,6 +214,9 @@ class JamesDspRemoteEngine(
         sendForkEffect(PARAM_EXCITER, enable, floatArrayOf(
             f1, f2, f3, a1, a2, a3, a4, character.toFloat(), drive, mix))
 
+    override fun setSubHarmonic(enable: Boolean, mixDb: Float, sweepHz: Float, wideOct: Float, dynamic: Boolean): Boolean =
+        sendForkEffect(PARAM_SUBHARMONIC, enable, floatArrayOf(mixDb, sweepHz, wideOct, if (dynamic) 1f else 0f))
+
     override fun setLowEnd(enable: Boolean, subsonic: Float, weightHz: Float, weightDb: Float, mudHz: Float, mudDb: Float, mix: Float): Boolean =
         sendForkEffect(PARAM_LOWEND, enable, floatArrayOf(
             subsonic, weightHz, weightDb, mudHz, mudDb, mix))
@@ -505,6 +508,7 @@ class JamesDspRemoteEngine(
         private const val PARAM_MAXIMIZER = PARAM_FORK_BASE + 19
         private const val PARAM_VINYL = PARAM_FORK_BASE + 20
         private const val PARAM_BALANCE = PARAM_FORK_BASE + 21
+        private const val PARAM_SUBHARMONIC = PARAM_FORK_BASE + 22
         /** Enable flags live one hundred above their value id. */
         private const val PARAM_FORK_ENABLE_OFFSET = 100
 

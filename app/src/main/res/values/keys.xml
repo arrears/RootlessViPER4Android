@@ -334,6 +334,11 @@
     <string name="key_vinyl_wear" translatable="false">vinyl_wear</string>
     <string name="key_vinyl_follow" translatable="false">vinyl_follow</string>
     <string name="key_vinyl_mix" translatable="false">vinyl_mix</string>
+    <string name="key_subharmonic_enable" translatable="false">subharmonic_enable</string>
+    <string name="key_subharmonic_mix" translatable="false">subharmonic_mix</string>
+    <string name="key_subharmonic_sweep" translatable="false">subharmonic_sweep</string>
+    <string name="key_subharmonic_wide" translatable="false">subharmonic_wide</string>
+    <string name="key_subharmonic_dynamic" translatable="false">subharmonic_dynamic</string>
     <string name="key_balance_enable" translatable="false">balance_enable</string>
     <string name="key_balance_balance" translatable="false">balance_balance</string>
     <string name="key_balance_swap" translatable="false">balance_swap</string>

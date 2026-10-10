@@ -1150,6 +1150,16 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="exciter_freq3">High starts at</string>
     <string name="exciter_mix">Mix</string>
     <string name="exciter_mix_summary">How much of the excited signal is blended back in. At 0%% nothing is changed at all.</string>
+    <string name="subharmonic_enable">Sub-harmonic generator</string>
+    <string name="subharmonic_info">Synthesises an octave below the bass that is already there, the way an AudioControl Epicenter does. It listens inside the band you set, locks onto the note and adds a clean sine one octave down, so an older mix with a bass guitar and no sub grows the foundation it never had. Everything it adds is low-passed at 80 Hz and runs inside Damon DSP\'s 120 Hz linear-phase split: the mids and highs are untouched, and what it adds is dipped on its own when it would otherwise reach the limiter.</string>
+    <string name="subharmonic_mix">Mix</string>
+    <string name="subharmonic_mix_summary">Level of the generated sub relative to the bass it came from. Start low; the bottom of the slider is off.</string>
+    <string name="subharmonic_sweep">Sweep</string>
+    <string name="subharmonic_sweep_summary">Centre of the band it listens to.</string>
+    <string name="subharmonic_wide">Wide</string>
+    <string name="subharmonic_wide_summary">Width of that band, in octaves. The default covers about 50 to 120 Hz.</string>
+    <string name="subharmonic_dynamic">Dynamic</string>
+    <string name="subharmonic_dynamic_summary">On, the sub follows the bass note by note. Off, it sits at a steadier level underneath.</string>
     <string name="lowend_enable">Low end</string>
     <string name="lowend_info">Three things for the bottom of the spectrum. The subsonic filter throws away rumble below anything you can hear, which is pure wasted headroom pushing the limiter around. Weight is one knob for body. Mud eases back the region where recordings pile up and turn thick. Folding bass to mono lives in the stereo imaging card, and putting punch back into a kick lives in Impact â€” neither is repeated here.</string>
     <string name="lowend_subsonic">Subsonic filter</string>

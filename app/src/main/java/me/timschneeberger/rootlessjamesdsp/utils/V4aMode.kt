@@ -39,6 +39,7 @@ object V4aMode {
         Constants.PREF_DYNAMICEQ to R.string.key_dyneq_enable,
         Constants.PREF_IMAGING to R.string.key_imaging_enable,
         Constants.PREF_TRANSIENT to R.string.key_transient_enable,
+        Constants.PREF_SUBHARMONIC to R.string.key_subharmonic_enable,
         Constants.PREF_LOWEND to R.string.key_lowend_enable,
         Constants.PREF_EXCITER to R.string.key_exciter_enable,
         Constants.PREF_TAPE to R.string.key_tape_enable,
@@ -66,7 +67,7 @@ object V4aMode {
      */
     val hiddenCardIds = intArrayOf(
         R.id.card_compressor, R.id.card_bass, R.id.card_bassex,
-        R.id.card_pitchshift, R.id.card_echo, R.id.card_mbd, R.id.card_maxr, R.id.card_dyneq, R.id.card_imaging, R.id.card_transient, R.id.card_lowend, R.id.card_exciter, R.id.card_tape, R.id.card_geq,
+        R.id.card_pitchshift, R.id.card_echo, R.id.card_mbd, R.id.card_maxr, R.id.card_dyneq, R.id.card_imaging, R.id.card_transient, R.id.card_subharmonic, R.id.card_lowend, R.id.card_exciter, R.id.card_tape, R.id.card_geq,
         R.id.card_peq, R.id.card_liveprog, R.id.card_liveprog2,
         R.id.card_liveprog3, R.id.card_liveprog4, R.id.card_stereowide,
         R.id.card_crossfeed, R.id.card_reverb

@@ -225,6 +225,13 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val exDrive = cache.get(R.string.key_exciter_drive, 6f)
             val exMix = cache.get(R.string.key_exciter_mix, 100f)
 
+            cache.select(Constants.PREF_SUBHARMONIC)
+            val shEnabled = cache.get(R.string.key_subharmonic_enable, false)
+            val shMix = cache.get(R.string.key_subharmonic_mix, -12f)
+            val shSweep = cache.get(R.string.key_subharmonic_sweep, 77f)
+            val shWide = cache.get(R.string.key_subharmonic_wide, 1.25f)
+            val shDynamic = cache.get(R.string.key_subharmonic_dynamic, true)
+
             cache.select(Constants.PREF_LOWEND)
             val leEnabled = cache.get(R.string.key_lowend_enable, false)
             val leSubsonic = cache.get(R.string.key_lowend_subsonic, 30f)
@@ -458,6 +465,9 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
                     Constants.PREF_EXCITER -> setExciter(
                         exEnabled, exF1, exF2, exF3, exA1, exA2, exA3, exA4,
                         exChar, exDrive, exMix
+                    )
+                    Constants.PREF_SUBHARMONIC -> setSubHarmonic(
+                        shEnabled, shMix, shSweep, shWide, shDynamic
                     )
                     Constants.PREF_LOWEND -> setLowEnd(
                         leEnabled, leSubsonic, leWeightFreq, leWeightGain,
@@ -845,6 +855,7 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
     abstract fun setBalance(enable: Boolean, balance: Float, swap: Boolean, mono: Float): Boolean
     abstract fun setVinyl(enable: Boolean, surface: Float, crackle: Float, crackleSize: Float, pops: Float, clicks: Float, sizzle: Float, hiss: Float, prickle: Float, rumble: Float, wear: Float, follow: Float, mix: Float): Boolean
     abstract fun setExciter(enable: Boolean, f1: Float, f2: Float, f3: Float, a1: Float, a2: Float, a3: Float, a4: Float, character: Int, drive: Float, mix: Float): Boolean
+    abstract fun setSubHarmonic(enable: Boolean, mixDb: Float, sweepHz: Float, wideOct: Float, dynamic: Boolean): Boolean
     abstract fun setLowEnd(enable: Boolean, subsonic: Float, weightHz: Float, weightDb: Float, mudHz: Float, mudDb: Float, mix: Float): Boolean
     abstract fun setTransient(enable: Boolean, freqLow: Float, freqHigh: Float, attackLow: Float, sustainLow: Float, attackMid: Float, sustainMid: Float, attackHigh: Float, sustainHigh: Float, range: Float, mix: Float): Boolean
     abstract fun setImaging(enable: Boolean, monoBelow: Float, freqLow: Float, freqMid: Float, freqHigh: Float, widthLow: Float, widthMid: Float, widthHigh: Float, mix: Float): Boolean

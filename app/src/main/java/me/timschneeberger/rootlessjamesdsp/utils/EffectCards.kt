@@ -36,6 +36,7 @@ object EffectCards {
         Constants.PREF_DYNAMICEQ to "card_dyneq",
         Constants.PREF_IMAGING to "card_imaging",
         Constants.PREF_TRANSIENT to "card_transient",
+        Constants.PREF_SUBHARMONIC to "card_subharmonic",
         Constants.PREF_LOWEND to "card_lowend",
         Constants.PREF_EXCITER to "card_exciter",
         Constants.PREF_TAPE to "card_tape",

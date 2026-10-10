@@ -164,6 +164,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     override fun setExciter(enable: Boolean, f1: Float, f2: Float, f3: Float, a1: Float, a2: Float, a3: Float, a4: Float, character: Int, drive: Float, mix: Float): Boolean =
         JamesDspWrapper.setExciter(handle, enable, f1, f2, f3, a1, a2, a3, a4, character, drive, mix)
 
+    override fun setSubHarmonic(enable: Boolean, mixDb: Float, sweepHz: Float, wideOct: Float, dynamic: Boolean): Boolean =
+        JamesDspWrapper.setSubHarmonic(handle, enable, mixDb, sweepHz, wideOct, dynamic)
+
     override fun setLowEnd(enable: Boolean, subsonic: Float, weightHz: Float, weightDb: Float, mudHz: Float, mudDb: Float, mix: Float): Boolean =
         JamesDspWrapper.setLowEnd(handle, enable, subsonic, weightHz, weightDb, mudHz, mudDb, mix)
 
