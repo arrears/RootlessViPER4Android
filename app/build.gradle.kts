@@ -16,17 +16,16 @@ android {
 
     val SUPPORTED_ABIS = setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     compileSdk = AndroidConfig.compileSdk
-    // Neutral on purpose: this is project-wide, so it cannot say "Rootless"
-    // without stamping that onto the rooted build's file names too. The variant
+    // Project-wide, so it names the product and not a packaging: the variant
     // part of each output already reads rootless-... or rootful-...
-    project.setProperty("archivesBaseName", "ViPER4Android-v${AndroidConfig.versionName}")
+    project.setProperty("archivesBaseName", "DamonDSP-v${AndroidConfig.versionName}")
 
     defaultConfig {
         targetSdk = AndroidConfig.targetSdk
         versionCode = AndroidConfig.versionCode
         versionName = AndroidConfig.versionName
 
-        manifestPlaceholders["label"] = "RootlessViPER4Android"
+        manifestPlaceholders["label"] = "Damon DSP"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -105,8 +104,8 @@ android {
         create("rootless") {
             dimension = "version"
 
-            manifestPlaceholders["label"] = "RootlessViPER4Android"
-            applicationId = "com.alienware377.viper4android.rootless"
+            manifestPlaceholders["label"] = "Damon DSP"
+            applicationId = "com.arrears.damondsp.rootless"
             AndroidConfig.minSdk = 29
             minSdk = AndroidConfig.minSdk
             buildConfigField("boolean", "ROOTLESS", "true")
@@ -119,12 +118,12 @@ android {
         create("rootful") {
             dimension = "version"
 
-            manifestPlaceholders["label"] = "RootfulViPER4Android"
+            manifestPlaceholders["label"] = "Damon DSP (Root)"
             // NOTE: archivesBaseName is a project-wide property, so setting it per
             // flavor makes the last-configured flavor win for every variant. The
             // base name is set once above and deliberately says neither rootless
             // nor rootful; the variant suffix distinguishes the outputs.
-            applicationId = "com.alienware377.viper4android.rootful"
+            applicationId = "com.arrears.damondsp.rootful"
             AndroidConfig.minSdk = 26
             minSdk = AndroidConfig.minSdk
             buildConfigField("boolean", "ROOTLESS", "false")
@@ -295,9 +294,10 @@ dependencies {
  * a device, as "Cannot launch application. Please re-download the latest
  * version..." - which reads like a corrupt download rather than a build fault.
  *
- * Every release build appends .v4a to the applicationId, so each flavour needs
- * its own suffixed entry. This checks all of them at build time and prints the
- * exact string to add, turning a tester-facing mystery into a build error.
+ * Each flavour has its own applicationId and label, and debug builds add a
+ * .debug suffix, so every one of them needs its own entry. This checks all of
+ * them at build time and prints the exact string to add, turning a
+ * tester-facing mystery into a build error.
  */
 tasks.register("verifyLaunchAllowlist") {
     group = "verification"
@@ -323,8 +323,8 @@ tasks.register("verifyLaunchAllowlist") {
         // applicationId per flavour, plus the .debug suffix debug builds carry.
         // Release builds no longer add a suffix.
         val expected = listOf(
-            "com.alienware377.viper4android.rootless" to "RootlessViPER4Android",
-            "com.alienware377.viper4android.rootful" to "RootfulViPER4Android"
+            "com.arrears.damondsp.rootless" to "Damon DSP",
+            "com.arrears.damondsp.rootful" to "Damon DSP (Root)"
         )
         val missing = mutableListOf<String>()
         expected.forEach { (appId, label) ->

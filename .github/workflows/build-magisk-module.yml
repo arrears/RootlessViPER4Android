@@ -10,7 +10,7 @@ name: Build Magisk module
 
 on:
   push:
-    branches: [ master, viper-extras ]
+    branches: [ master, viper-extras, damon-dsp, 'ccr-*' ]
     paths:
       - 'magisk/**'
       - 'app/src/main/cpp/**'
@@ -105,19 +105,19 @@ jobs:
         run: |
           set -eu
           cd build
-          unzip -l rv4a-engine-module.zip
+          unzip -l damondsp-engine-module.zip
           # A zip written by a Windows tool stores literal backslashes, and the
           # module then installs as files with backslashes in their names
           # instead of directories, doing nothing at all. Checked against the
           # raw central directory, because Python normalises separators on read.
-          if grep -qU $'\\\\' <(unzip -l rv4a-engine-module.zip); then
+          if grep -qU $'\\\\' <(unzip -l damondsp-engine-module.zip); then
             echo "backslash paths in the archive"; exit 1
           fi
           for f in module.prop customize.sh post-fs-data.sh service.sh common/patch_audio_config.sh; do
-            unzip -l rv4a-engine-module.zip | grep -q " $f$" || { echo "missing $f"; exit 1; }
+            unzip -l damondsp-engine-module.zip | grep -q " $f$" || { echo "missing $f"; exit 1; }
           done
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rv4a-engine-module
-          path: build/rv4a-engine-module.zip
+          name: damondsp-engine-module
+          path: build/damondsp-engine-module.zip

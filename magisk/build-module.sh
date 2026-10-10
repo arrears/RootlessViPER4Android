@@ -64,5 +64,5 @@ echo "scripts verified: unix line endings, valid shell"
 # zip -r keeps forward slashes. Windows' Compress-Archive does not, and a module
 # zipped that way installs as files with literal backslashes in their names
 # instead of directories, so it silently does nothing.
-( cd "$OUT" && zip -qr ../rv4a-engine-module.zip . )
-echo "packaged: build/rv4a-engine-module.zip"
+( cd "$OUT" && zip -qr ../damondsp-engine-module.zip . )
+echo "packaged: build/damondsp-engine-module.zip"

@@ -24,13 +24,23 @@ ui_print "- Root: $ROOT_IMPL, Android API $API"
 # A module that disabled itself after two bad boots keeps that flag across an
 # upgrade, so installing the build that fixes the problem produced a cheerful
 # "reboot to load the engine" and a module that was still switched off.
-if [ -f /data/adb/modules/rv4a_engine/disable ]; then
-  rm -f /data/adb/modules/rv4a_engine/disable
+if [ -f /data/adb/modules/damondsp_engine/disable ]; then
+  rm -f /data/adb/modules/damondsp_engine/disable
   ui_print "- Cleared a previous self-disable"
-  if [ -f /data/adb/modules/rv4a_engine/boot.log ]; then
-    grep -i "quarantined\|rejected" /data/adb/modules/rv4a_engine/boot.log 2>/dev/null |
+  if [ -f /data/adb/modules/damondsp_engine/boot.log ]; then
+    grep -i "quarantined\|rejected" /data/adb/modules/damondsp_engine/boot.log 2>/dev/null |
       tail -3 | while read -r l; do ui_print "  was: $l"; done
   fi
+fi
+
+# This module used to be installed as rv4a_engine (RootlessViPER4Android). The
+# id changed with the Damon DSP rename, so Magisk sees a second module rather
+# than an upgrade. Both would mount the same libjamesdsp.so and patch the same
+# audio config, so the old one is flagged for removal on the next reboot; the
+# same reboot this install asks for.
+if [ -d /data/adb/modules/rv4a_engine ]; then
+  touch /data/adb/modules/rv4a_engine/remove
+  ui_print "- Found the old rv4a_engine module; it is removed on reboot"
 fi
 
 # The effect is a legacy audio-effect library: the audio server discovers it
@@ -141,13 +151,13 @@ ui_print " "
 ui_print "  If the device fails to boot, boot into Safe Mode,"
 ui_print "  which disables every module, or connect it and run:"
 case "$ROOT_IMPL" in
-  KernelSU) ui_print "    adb wait-for-device shell su -c 'ksud module disable rv4a_engine'" ;;
-  APatch)   ui_print "    adb wait-for-device shell su -c 'apd module disable rv4a_engine'" ;;
+  KernelSU) ui_print "    adb wait-for-device shell su -c 'ksud module disable damondsp_engine'" ;;
+  APatch)   ui_print "    adb wait-for-device shell su -c 'apd module disable damondsp_engine'" ;;
   # Not "magisk --remove-modules": that deletes every module on the device,
   # and it is refused from an unprivileged adb shell anyway, so the one line
   # a panicking user would copy used to both fail and, if it worked, take
   # their unrelated modules with it.
-  *)        ui_print "    adb wait-for-device shell su -c 'touch /data/adb/modules/rv4a_engine/disable'" ;;
+  *)        ui_print "    adb wait-for-device shell su -c 'touch /data/adb/modules/damondsp_engine/disable'" ;;
 esac
 ui_print "  (su over adb has to be granted in the manager already.)"
 ui_print " "

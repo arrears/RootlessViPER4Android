@@ -1,8 +1,8 @@
-# Privacy Policy for RootlessViPER4Android
+# Privacy Policy for Damon DSP
 
 **Last updated: 9 August 2026**
 
-RootlessViPER4Android ("the app") is a free, open-source audio processing app for
+Damon DSP ("the app") is a free, open-source audio processing app for
 Android. This policy explains, in plain language, exactly what the app does and does
 not do with your information.
 
@@ -102,9 +102,9 @@ The app is open source and licensed under the GNU General Public License v3.0. B
 the complete source code and build configuration are public, every claim in this policy
 can be independently verified:
 
-**https://github.com/alienware377/RootlessViPER4Android**
+**https://github.com/arrears/RootlessViPER4Android**
 
-RootlessViPER4Android is a fork of RootlessJamesDSP by Tim Schneeberger.
+Damon DSP is a fork of RootlessViPER4Android by alienware377, itself a fork of RootlessJamesDSP by Tim Schneeberger.
 
 ## 9. Changes to this policy
 
@@ -117,4 +117,4 @@ are expected to be rare.
 Questions about this policy or the app's privacy practices can be raised as an issue
 in the project repository:
 
-**https://github.com/alienware377/RootlessViPER4Android/issues**
+**https://github.com/arrears/RootlessViPER4Android/issues**

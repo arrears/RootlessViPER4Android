@@ -32,6 +32,8 @@ object RubberBandInstaller {
      */
     const val FIRST_MODE = 2
     private const val TAG = "rubberband-v$VERSION"
+    // The add-on binaries are published on the RootlessViPER4Android release
+    // that built them; Damon DSP reuses them unchanged rather than re-hosting.
     private const val BASE =
         "https://github.com/alienware377/RootlessViPER4Android/releases/download/$TAG"
 

@@ -498,7 +498,7 @@ class MainActivity : BaseActivity() {
                     ) {
                         if(it) {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
-                                "https://github.com/alienware377/RootlessViPER4Android/releases/latest")))
+                                "https://github.com/arrears/RootlessViPER4Android/releases/latest")))
                         }
                     }
                 }

@@ -1,4 +1,4 @@
-# RootlessViPER4Android engine (Magisk module)
+# Damon DSP engine (Magisk module)
 
 Installs this fork's DSP engine as a **system-wide audio effect**.
 
@@ -19,7 +19,7 @@ descriptor the app looks up, so no app-side change is needed.
 ## Building
 
 Run `magisk/build-module.sh` from the repository root: it builds every ABI and
-writes `build/rv4a-engine-module.zip`.
+writes `build/damondsp-engine-module.zip`.
 
 If you package by hand, zip with forward-slash separators. Windows'
 `Compress-Archive` writes backslashes, and a module zipped that way extracts as
@@ -86,8 +86,8 @@ like a bootloop. Recovery, easiest first:
 2. **Safe Mode** — hold the key combo your device uses at boot. Magisk detects
    Safe Mode and disables all modules; the state persists after a normal
    reboot, so you can then remove this one from the Magisk app.
-3. **Recovery** — delete `/data/adb/modules/rv4a_engine` from a file manager in
-   TWRP, or `rm -rf /data/adb/modules/rv4a_engine` from its shell.
+3. **Recovery** — delete `/data/adb/modules/damondsp_engine` from a file manager in
+   TWRP, or `rm -rf /data/adb/modules/damondsp_engine` from its shell.
 
 The module also defends itself: `post-fs-data.sh` runs before the audio server
 starts and moves aside any audio config of ours that fails validation, so the

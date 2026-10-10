@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RootlessJamesDSP"
+rootProject.name = "DamonDSP"
 include ':app'
 include ':codeview'
 include ':hidden-api-stubs'

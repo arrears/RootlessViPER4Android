@@ -528,7 +528,11 @@ class JamesDspRemoteEngine(
                             // dropped silently at that end and the app has no
                             // way to notice, so the user moved sliders that
                             // could not do anything and nothing said why.
-                            name.contains("RootlessViPER4Android") -> PluginState.Available
+                            // The Damon DSP engine, or the RootlessViPER4Android
+                            // one it was forked from: same parameter ids, so a
+                            // module flashed before the rename still counts.
+                            name.contains("Damon DSP") ||
+                                name.contains("RootlessViPER4Android") -> PluginState.Available
                             else -> {
                                 Timber.w("isPluginInstalled: a different engine answers to this uuid: '$name'")
                                 PluginState.Foreign

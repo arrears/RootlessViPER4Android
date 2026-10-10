@@ -1,7 +1,10 @@
-name: Build fork APK
+# Damon DSP: every run produces the rootless APK, the rootful APK and the
+# Magisk module carrying the shared engine, so a build can go straight onto
+# the Redmi Note 10 Pro (flash) or the S24 Ultra (install) from the Actions tab.
+name: Build Damon DSP
 on:
   push:
-    branches: [ master, viper-extras ]
+    branches: [ master, viper-extras, damon-dsp, 'ccr-*' ]
   workflow_dispatch:
 
 jobs:
@@ -20,11 +23,11 @@ jobs:
       - name: Upload rootless APK
         uses: actions/upload-artifact@v4
         with:
-          name: RootlessViPER4Android-release
+          name: DamonDSP-rootless-apk
           path: app/build/outputs/apk/rootlessFdroid/release/*.apk
 
       # Root testers need the rootful APK, which is a different package
-      # (com.alienware377.viper4android.rootful) and installs alongside the
+      # (com.arrears.damondsp.rootful) and installs alongside the
       # rootless build.
       - name: Build rootful release APK
         run: ./gradlew assembleRootfulFdroidRelease --no-daemon
@@ -32,7 +35,7 @@ jobs:
       - name: Upload rootful APK
         uses: actions/upload-artifact@v4
         with:
-          name: RootfulViPER4Android-release
+          name: DamonDSP-rootful-apk
           path: app/build/outputs/apk/rootfulFdroid/release/*.apk
 
       # The Magisk module carries this fork's engine as a system-wide effect,
@@ -46,5 +49,5 @@ jobs:
       - name: Upload Magisk module
         uses: actions/upload-artifact@v4
         with:
-          name: RootlessViPER4Android-magisk-module
-          path: build/rv4a-engine-module.zip
+          name: DamonDSP-magisk-module
+          path: build/damondsp-engine-module.zip

@@ -21,7 +21,7 @@
 
 #include <android/log.h>
 
-#define LOG_TAG "RV4A-HAL"
+#define LOG_TAG "DamonDSP-HAL"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -52,8 +52,8 @@ static effect_descriptor_t rv4a_descriptor =
        said nothing about which engine or which version, which is why a device
        running the stock module showed every fork card and responded to none
        of them: unhandled ids are dropped without a word at both ends. */
-    "RootlessViPER4Android engine v4",
-    "alienware377"
+    "Damon DSP engine v4",
+    "arrears"
 };
 
 struct rv4a_context
@@ -731,8 +731,8 @@ HAL_EXPORT audio_effect_library_t AUDIO_EFFECT_LIBRARY_INFO_SYM =
 {
     .tag = AUDIO_EFFECT_LIBRARY_TAG,
     .version = EFFECT_LIBRARY_API_VERSION,
-    .name = "RootlessViPER4Android Effect Library",
-    .implementor = "alienware377",
+    .name = "Damon DSP Effect Library",
+    .implementor = "arrears",
     .create_effect = EffectCreate,
     .release_effect = EffectRelease,
     .get_descriptor = EffectGetDescriptor,

@@ -25,17 +25,7 @@
         android:icon="@drawable/ic_baseline_github_24dp">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="https://github.com/thepbone/RootlessJamesDSP" />
-    </Preference>
-
-    <Preference
-        android:key="@string/key_credits_google_play"
-        android:title="@string/credits_project_play_page"
-        android:summary="@string/credits_project_play_page_summary"
-        android:icon="@drawable/ic_baseline_google_play_24dp">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:data="https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp" />
+            android:data="https://github.com/arrears/RootlessViPER4Android" />
     </Preference>
 
     <Preference
@@ -57,6 +47,22 @@
     <PreferenceCategory
     app:title="@string/credits"
     app:iconSpaceReserved="false">
+    <Preference
+        android:title="@string/credits_fork"
+        android:summary="Damon (@arrears)"
+        app:iconSpaceReserved="false">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="https://github.com/arrears" />
+    </Preference>
+    <Preference
+        android:title="@string/credits_rv4a"
+        android:summary="alienware377 — RootlessViPER4Android"
+        app:iconSpaceReserved="false">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="https://github.com/alienware377/RootlessViPER4Android" />
+    </Preference>
     <Preference
         android:title="@string/credits_app"
         android:summary="Tim Schneeberger (@thepbone)"
