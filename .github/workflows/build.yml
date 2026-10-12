@@ -1,13 +1,11 @@
-name: Build signed app
+# Upstream RootlessJamesDSP's release workflow, kept for reference. It builds
+# the "full" (Play) flavour against upstream's Firebase project and deploys to
+# upstream's server, none of which applies to this fork. It used to fire on
+# every v* tag as well, which would have run a second, failing build beside
+# the real release on each tag; Damon DSP releases come from build-fork.yml.
+name: Build signed app (upstream, manual only)
 on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
-    tags:
-      - v*
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -48,12 +48,59 @@ android {
         }
     }
 
+    // Release builds are signed with one stable keystore, handed in through the
+    // environment by CI (the four DAMONDSP_* variables below) so that every build
+    // installs as an in-place update over the last one. That matters more here
+    // than usual: the rootless app's capture permission (appops PROJECT_MEDIA)
+    // is granted once over ADB, and it survives an update only while the
+    // signature stays the same. A debug-signed build would cost an uninstall
+    // and a fresh grant every time.
+    //
+    // Without those variables a release build falls back to the checked-in
+    // debug key so a local build still works, and says so. CI sets
+    // DAMONDSP_REQUIRE_RELEASE_KEY=1, which turns that fallback into an error:
+    // a debug-signed artifact must never leave the workflow, because the first
+    // one installed decides which key every later update has to match.
+    val releaseKeystorePath = System.getenv("DAMONDSP_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    val requireReleaseKey = System.getenv("DAMONDSP_REQUIRE_RELEASE_KEY") == "1"
+    if (requireReleaseKey && releaseKeystorePath == null) {
+        throw GradleException(
+            "DAMONDSP_REQUIRE_RELEASE_KEY=1 but DAMONDSP_KEYSTORE_FILE is not set: " +
+            "refusing to sign a release with the debug key. Provide the release " +
+            "keystore (DAMONDSP_KEYSTORE_FILE, DAMONDSP_KEYSTORE_PASSWORD, " +
+            "DAMONDSP_KEY_ALIAS, DAMONDSP_KEY_PASSWORD)."
+        )
+    }
+    if (releaseKeystorePath != null && !file(releaseKeystorePath).isFile) {
+        throw GradleException("DAMONDSP_KEYSTORE_FILE points at $releaseKeystorePath, which is not a file")
+    }
+
     signingConfigs {
         getByName("debug") {
             storeFile = rootProject.file("keystore/debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
+        }
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("DAMONDSP_KEYSTORE_PASSWORD")
+                    ?: throw GradleException("DAMONDSP_KEYSTORE_PASSWORD is not set")
+                keyAlias = System.getenv("DAMONDSP_KEY_ALIAS")
+                    ?: throw GradleException("DAMONDSP_KEY_ALIAS is not set")
+                keyPassword = System.getenv("DAMONDSP_KEY_PASSWORD")
+                    ?: throw GradleException("DAMONDSP_KEY_PASSWORD is not set")
+                // v2 and v3 only: v1 (JAR) signing is not needed from minSdk 26
+                // up, and the v3 rotation-capable scheme is what apksigner
+                // prints the certificate digest from.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+            logger.lifecycle("Release builds are signed with the stable keystore at $releaseKeystorePath")
+        } else {
+            logger.warn("No DAMONDSP_KEYSTORE_FILE: release builds will carry the DEBUG signature and will not update over a release-signed install")
         }
     }
 
@@ -76,7 +123,7 @@ android {
             //proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystorePath != null) "release" else "debug")
         }
         create("preview") {
             initWith(getByName("release"))

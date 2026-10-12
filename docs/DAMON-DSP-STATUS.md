@@ -17,6 +17,7 @@ EQ, Spectrum Extension or Playback Gain Control.
 |---|---|---|
 | Project rename to Damon DSP | Done (v4.1.0) | See below for exactly what changed and what was deliberately kept |
 | Feature 1: Sub-harmonic generator | Done (v4.1.0) | Placement confirmed: inside the bass block, with the other bass processors. See below |
+| Stable signing keystore and GitHub Releases | Done (v4.1.1) | Release-key signing enforced in CI, module bundles the rootful app, `v*` tags self-publish. See below |
 | Feature 2: Adaptive bass controller | Not started | Runs inside the same bass block; drives a low shelf on the low band and Feature 1's Mix |
 | Feature 3: Dolby-alike mode | Not started | Research public Dolby Atmos / DAX modules and open Dolby-alike DSP projects; no old V40 module zip |
 | Feature 16: Chain builder | Not started | Replaces the fixed order with a chain description read at init |
@@ -111,3 +112,42 @@ low-pass) are the brief's and will want tuning by ear. Not yet done:
 exposing the current Mix and the bass-band meters for the Feature 5
 visualiser, and the minimum-phase swap for Feature 12.
 
+
+## Signing keystore and releases
+
+Done in v4.1.1, as the "Signing keystore and release" section of the brief
+asks, with the order the hand-off doc insists on: keystore first, then the
+build Damon keeps.
+
+- One release keystore (RSA 2048, PKCS12, alias `damondsp`, valid 30 years),
+  generated once with keytool and never committed. It lives in four
+  repository secrets: `SIGNING_KEYSTORE` (the file, base64), `KEY_ALIAS`,
+  `KEYSTORE_PASSWORD`, `KEY_PASSWORD`.
+- `app/build.gradle.kts` signs release builds with it when
+  `DAMONDSP_KEYSTORE_FILE` and friends are in the environment, and with
+  `DAMONDSP_REQUIRE_RELEASE_KEY=1` (set by CI) refuses to build at all
+  without them. A local build without the keystore still works, debug-signed,
+  with a warning: that build will not update over a release-signed install.
+- The `Build Damon DSP` workflow unpacks the keystore first and fails before
+  building if any secret is missing; builds the rootless and rootful release
+  APKs; verifies every APK with `apksigner` and compares its signer to the
+  keystore's certificate; prints the certificate SHA-256 in the log and the
+  run summary; builds the Magisk module with the signed arm64 rootful APK
+  inside it (`customize.sh` installs the app when flashed from the Magisk app;
+  from recovery it says to install the APK by hand); runs
+  `ci/check-module.sh`; and on a `v*` tag, or a manual run with
+  `release_tag`, publishes a GitHub Release with the module zip, the rootless
+  arm64 APK and the rootful arm64 APK attached. The body comes from
+  `docs/releases/<tag>.md` plus the certificate and an install reminder
+  (`ci/release-notes.sh`).
+- `ci/check-module.sh` holds every module check (module.prop in step with
+  the app, LF line endings, scripts parse under dash, nothing written outside
+  the module directory, 16 KB page alignment, no TEXTREL, no executable
+  stack, soname, the four exported symbols, zip paths, bundled APK); both
+  workflows call it, so they cannot drift.
+- Upstream's `build.yml` no longer fires on tags; it would have run a second,
+  failing build beside each release.
+- One-time cost, unchanged from the brief: moving from the alienware377 4.0.0
+  build, or from the debug-signed 4.1.0 Feature 1 build, to the first
+  release-signed build needs one uninstall and one ADB capture grant. After
+  that the key never changes.

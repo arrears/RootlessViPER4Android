@@ -1,6 +1,6 @@
 id=damondsp_engine
 name=Damon DSP engine
-version=v4.1.0
-versionCode=128
+version=v4.1.1
+versionCode=129
 author=arrears
 description=Installs the Damon DSP engine (a RootlessViPER4Android / JamesDSP fork) as a system-wide audio effect, so root mode runs this project's own effects at the mixer's native rate rather than the stock JamesDSP set. Carries the ViPER4Android ports, the vintage tape and vinyl cards, balance, the maximizer, dynamic EQ, stereo imaging, impact, low end, the exciter, four reverb rooms, the ViPER classic limiter, the rebuilt delay and the pitch shifter, and is where the Damon DSP adaptive bass stages land.

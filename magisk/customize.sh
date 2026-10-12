@@ -146,6 +146,39 @@ else
   patch_audio_config || abort "! Aborting rather than installing something inert"
 fi
 
+# --- the app that drives the engine ---------------------------------------
+# The rooted app ships inside the module, so one flash installs both halves.
+# It can only be installed when flashing from the root manager (BOOTMODE),
+# where the package manager is running; recovery has no pm to call. Either way
+# the copy inside the module directory is removed afterwards: nothing reads it
+# after this point, and the same APK is attached to every GitHub release.
+APK="$MODPATH/DamonDSP-rootful.apk"
+if [ -f "$APK" ]; then
+  if [ "$BOOTMODE" = "true" ] && command -v pm >/dev/null 2>&1; then
+    # system_server cannot read /data/adb, so the APK is staged somewhere it
+    # can. -r replaces an existing install; it is refused when the existing
+    # app was signed with a different key, which is the one-time cost of
+    # moving from a debug-signed build to the release key.
+    TMP_APK=/data/local/tmp/DamonDSP-rootful.apk
+    if cp "$APK" "$TMP_APK" && chmod 644 "$TMP_APK" &&
+       pm install -r --user 0 "$TMP_APK" >"$MODPATH/apk-install.log" 2>&1; then
+      ui_print "- Installed the Damon DSP (Root) app"
+      rm -f "$MODPATH/apk-install.log"
+    else
+      ui_print "! Could not install the Damon DSP (Root) app:"
+      tail -n 3 "$MODPATH/apk-install.log" 2>/dev/null | while read -r l; do ui_print "    $l"; done
+      ui_print "  If it says the signature does not match, uninstall the"
+      ui_print "  old app once, then install the rootful APK from the"
+      ui_print "  release page. The engine is installed regardless."
+    fi
+    rm -f "$TMP_APK"
+  else
+    ui_print "- Flashed from recovery, so the app was not installed:"
+    ui_print "  install the rootful APK from the release page."
+  fi
+  rm -f "$APK"
+fi
+
 ui_print "- Reboot to load the engine"
 ui_print " "
 ui_print "  If the device fails to boot, boot into Safe Mode,"

@@ -40,6 +40,12 @@ is the filename the audio server expects — then zip the `magisk/` directory.
 
 ## Installing
 
+The module also carries the rooted app (`DamonDSP-rootful.apk`, arm64,
+signed with the release key). Flashed from the Magisk app it installs the app
+too; flashed from recovery there is no package manager to call, so install the
+rootful APK from the release page by hand. The copy inside the module is
+removed after the attempt either way.
+
 Flash in Magisk, then reboot. The installer copies the library into
 `/system/lib*/soundfx/` and registers it in whichever audio effects config the
 device uses — XML on Android 9+, the older `.conf` on some vendor images —
