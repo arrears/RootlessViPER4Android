@@ -21,6 +21,30 @@ else
 fi
 ui_print "- Root: $ROOT_IMPL, Android API $API"
 
+# KernelSU 3.x and KernelSU Next 3.x stopped mounting module files themselves
+# and hand that to a metamodule. Without one, ksud runs our scripts but never
+# mounts system/, so neither the library nor the config ever reaches the audio
+# server: the install succeeds, the boot log says "engine present", and the
+# app finds no driver. Older versions mount on their own, so this warns rather
+# than aborts.
+if [ "$ROOT_IMPL" != "Magisk" ]; then
+  HAS_META=0
+  [ -e /data/adb/metamodule ] && HAS_META=1
+  for p in /data/adb/modules/*/module.prop; do
+    [ -f "$p" ] || continue
+    grep -qiE '^metamodule=(1|true)' "$p" && HAS_META=1
+  done
+  if [ "$HAS_META" = "0" ]; then
+    ui_print " "
+    ui_print "! No metamodule found. KernelSU / KernelSU Next 3.x"
+    ui_print "  (and newer APatch) mount module files only through"
+    ui_print "  one; without it this engine is never loaded. Install a"
+    ui_print "  mounting metamodule (e.g. meta-overlayfs) via the"
+    ui_print "  manager's metamodule screen, then reboot."
+    ui_print " "
+  fi
+fi
+
 # A module that disabled itself after two bad boots keeps that flag across an
 # upgrade, so installing the build that fixes the problem produced a cheerful
 # "reboot to load the engine" and a module that was still switched off.

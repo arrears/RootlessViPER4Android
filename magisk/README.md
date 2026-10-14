@@ -70,10 +70,21 @@ Built and verified against **Magisk**. The module format is understood by
 **KernelSU**, **KernelSU Next** and **APatch** too, and the installer adapts its
 recovery advice to whichever it finds.
 
-One caveat worth knowing before you try: on KernelSU and APatch, mounting files
-into `/vendor` and `/system` can require a **metamodule**. If the module
-installs cleanly but the effect never appears, check that first — it is the
-usual cause, and it is reported for other audio modules as well.
+**KernelSU 3.x and KernelSU Next 3.x need a metamodule.** They no longer
+mount module files themselves: without a mounting metamodule such as
+`meta-overlayfs`, the module's scripts run but its `system/` tree is never
+mounted, so the library and config never reach the audio server. The install
+succeeds, `boot.log` reports the engine present, and the app still finds no
+driver. The installer warns when it finds no metamodule. Newer APatch works the
+same way. This is the usual cause when the effect never appears, and it is
+reported for other audio modules as well. ROMs that bundle KernelSU Next 3.x
+(for example crDroid 12 for the LG V40) hit this out of the box.
+
+**DIRECT output bypasses every effect.** Some ROMs route music straight to a
+hardware DAC through a DIRECT output (crDroid 12 for the LG V40 does this with
+the Hi-Fi Quad DAC on and 3.5mm headphones in). The audio server attaches no
+effects to DIRECT outputs, so this engine, Dolby and every other effect fall
+silent there. Turn the Hi-Fi DAC off, or use a non-DIRECT output, to hear it.
 
 ## If the device won't boot
 
