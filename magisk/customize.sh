@@ -93,44 +93,61 @@ if [ "$HAS_AIDL" = "1" ]; then
   ui_print "  effect does not appear, the AIDL HAL is the one in use."
 fi
 
+# Both word sizes, not just the device's primary one. The process that loads
+# effects is often 32-bit on a 64-bit device: the LG V40's audio HAL is, and
+# loads every effect from /vendor/lib/soundfx. Installing only the arm64 build
+# into lib64 there gave a config naming a library the HAL could never find,
+# logged as "Could not find library in effect directories". Whichever of the
+# two the HAL turns out to be, its copy is there.
 case "$ARCH" in
-  arm64) ABI_DIR="arm64-v8a";   LIBDIR="lib64" ;;
-  arm)   ABI_DIR="armeabi-v7a"; LIBDIR="lib"   ;;
-  x64)   ABI_DIR="x86_64";      LIBDIR="lib64" ;;
-  x86)   ABI_DIR="x86";         LIBDIR="lib"   ;;
+  arm64) ABIS="arm64-v8a:lib64 armeabi-v7a:lib" ;;
+  arm)   ABIS="armeabi-v7a:lib" ;;
+  x64)   ABIS="x86_64:lib64 x86:lib" ;;
+  x86)   ABIS="x86:lib" ;;
   *)     abort "! Unsupported architecture: $ARCH" ;;
 esac
 
-ui_print "- Architecture: $ARCH ($ABI_DIR)"
+ui_print "- Architecture: $ARCH"
 
-SO="$MODPATH/libs/$ABI_DIR/libjamesdsp.so"
-[ -f "$SO" ] || abort "! No engine build for $ABI_DIR in this package"
+# The context is set explicitly, because set_perm hardcodes system_file in
+# Magisk, KernelSU and APatch alike. The /system copy is system_lib_file, the
+# type that describes it; that type does not exist before Android 10, so it is
+# asked for only where it exists. The /vendor copy is vendor_file, the type of
+# every stock library beside it, which the vendor audio HAL is allowed to map.
+label_engine() {
+  case "$1" in
+    */system/vendor/*) set_perm "$1" 0 0 0644 u:object_r:vendor_file:s0 ;;
+    *) [ "$API" -ge 29 ] && set_perm "$1" 0 0 0644 u:object_r:system_lib_file:s0 ;;
+  esac || set_perm "$1" 0 0 0644 || ui_print "! Could not set permissions on $1"
+}
 
-# Install to both system and vendor soundfx: which one the audio server loads
-# from depends on where the device's config lives, and this costs one file.
-#
-# The context is set explicitly. The comment here used to claim set_perm leaves
-# the label to the mount point; it does not, it hardcodes system_file in
-# Magisk, KernelSU and APatch alike. system_file happens to be loadable by the
-# audio server, so this has been working by luck rather than design, and
-# system_lib_file is the type that actually describes the file. It does not
-# exist before Android 10, so ask for it only where it exists and fall back
-# rather than leaving set_perm to fail unnoticed.
-for D in "$MODPATH/system/$LIBDIR/soundfx" "$MODPATH/system/vendor/$LIBDIR/soundfx"; do
-  mkdir -p "$D"
-  cp "$SO" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
-  set_perm "$D" 0 0 0755
-  if [ "$API" -ge 29 ]; then
-    set_perm "$D/libjamesdsp.so" 0 0 0644 u:object_r:system_lib_file:s0 ||
-      set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
-  else
-    set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
+installed=""
+for pair in $ABIS; do
+  ABI_DIR=${pair%%:*}
+  LIBDIR=${pair##*:}
+  SO="$MODPATH/libs/$ABI_DIR/libjamesdsp.so"
+  if [ ! -f "$SO" ]; then
+    # Only the primary build is required; a 64-bit device whose audio HAL is
+    # 64-bit as well never touches the other one.
+    [ -z "$installed" ] && abort "! No engine build for $ABI_DIR in this package"
+    ui_print "! No $ABI_DIR engine in this package; a 32-bit audio HAL will not find one"
+    continue
   fi
+  # Install to both system and vendor soundfx: which one the audio server loads
+  # from depends on where the device's config lives, and this costs one file.
+  for D in "$MODPATH/system/$LIBDIR/soundfx" "$MODPATH/system/vendor/$LIBDIR/soundfx"; do
+    mkdir -p "$D"
+    cp "$SO" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
+    case "$D" in
+      */system/vendor/*) set_perm "$D" 0 0 0755 u:object_r:vendor_file:s0 || set_perm "$D" 0 0 0755 ;;
+      *) set_perm "$D" 0 0 0755 ;;
+    esac
+    label_engine "$D/libjamesdsp.so"
+  done
+  installed="$installed $LIBDIR"
 done
 rm -rf "$MODPATH/libs"
-ui_print "- Engine installed to $LIBDIR/soundfx"
+ui_print "- Engine installed to:$installed (soundfx)"
 
 . "$MODPATH/common/patch_audio_config.sh"
 

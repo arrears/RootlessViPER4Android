@@ -78,6 +78,8 @@ for so in "$LIBS"/*/libjamesdsp.so; do
   echo "  $(stat -c%s "$so") bytes"
 done
 [ -f "$LIBS/arm64-v8a/libjamesdsp.so" ] || { echo "no arm64-v8a engine was built"; fail=1; }
+# 64-bit phones often run a 32-bit audio HAL, which can only load this one.
+[ -f "$LIBS/armeabi-v7a/libjamesdsp.so" ] || { echo "no armeabi-v7a engine was built"; fail=1; }
 [ "$n" -ge 1 ] || { echo "no libraries found under $LIBS"; fail=1; }
 
 # --- the packaged zip --------------------------------------------------------
@@ -90,13 +92,25 @@ unzip -l "$ZIP"
 if unzip -l "$ZIP" | grep -qU '\\\\'; then
   echo "backslash paths in the archive"; fail=1
 fi
-for f in module.prop customize.sh post-fs-data.sh service.sh common/patch_audio_config.sh libs/arm64-v8a/libjamesdsp.so; do
+for f in module.prop customize.sh post-fs-data.sh post-mount.sh service.sh common/patch_audio_config.sh libs/arm64-v8a/libjamesdsp.so; do
   unzip -l "$ZIP" | grep -q " $f$" || { echo "missing $f"; fail=1; }
 done
 # The rooted app is bundled on release builds; a module without it is not
 # what the release page promises.
 if [ "${DAMONDSP_EXPECT_APK:-0}" = "1" ]; then
   unzip -l "$ZIP" | grep -q " DamonDSP-rootful.apk$" || { echo "missing the bundled DamonDSP-rootful.apk"; fail=1; }
+  # The app's libjamesdsp.so and the module's share a file name, and the APK
+  # once shipped the module's: four effect entry points and none of the
+  # JamesDSP* symbols the wrapper links against, so the app crashed on start.
+  tmp=$(mktemp -d)
+  if unzip -q -o "$ZIP" DamonDSP-rootful.apk -d "$tmp" &&
+     unzip -q -o "$tmp/DamonDSP-rootful.apk" lib/arm64-v8a/libjamesdsp.so -d "$tmp"; then
+    "$NM" -D --defined-only "$tmp/lib/arm64-v8a/libjamesdsp.so" | grep -qw JamesDSPGlobalMemoryAllocation ||
+      { echo "the bundled app's libjamesdsp.so is the effect library, not the app's"; fail=1; }
+  else
+    echo "could not read lib/arm64-v8a/libjamesdsp.so from the bundled app"; fail=1
+  fi
+  rm -rf "$tmp"
 fi
 
 if [ "$fail" -ne 0 ]; then echo "MODULE CHECKS FAILED"; exit 1; fi

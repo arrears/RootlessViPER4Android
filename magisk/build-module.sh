@@ -20,7 +20,8 @@ for ABI in arm64-v8a armeabi-v7a x86_64 x86; do
   cmake -S app/src/main/cpp -B "$BUILD" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
         -DANDROID_ABI="$ABI" \
-        -DANDROID_PLATFORM=android-26
+        -DANDROID_PLATFORM=android-26 \
+        -DDAMONDSP_BUILD_HAL=ON
   cmake --build "$BUILD" --target jamesdsp_hal
   mkdir -p "$OUT/libs/$ABI"
   # Renamed here: the target can't be called libjamesdsp.so in the build tree
@@ -39,7 +40,9 @@ done
 # post-fs-data.sh is the boot safety net - it quarantines a bad audio config
 # before the audio server starts. Leaving it out of the package would ship the
 # module without its only defence against an unrecoverable bootloop.
-cp magisk/customize.sh magisk/service.sh \
+# post-mount.sh is what gets /vendor mounted where the root manager's own
+# mount drops it; without it the engine never reaches the vendor audio config.
+cp magisk/customize.sh magisk/service.sh magisk/post-mount.sh \
    magisk/post-fs-data.sh magisk/README.md magisk/STOCK-BASELINE.md "$OUT/"
 mkdir -p "$OUT/common"; cp -r magisk/common/. "$OUT/common/"
 

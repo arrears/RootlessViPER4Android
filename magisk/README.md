@@ -29,14 +29,14 @@ installs without error and does nothing.
 ### Manual
 
 ```
-./gradlew :app:externalNativeBuildRootFdroidRelease   # or build the target directly
+cmake -S app/src/main/cpp -B <build-dir> -DDAMONDSP_BUILD_HAL=ON \
+      -DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake -DANDROID_ABI=<abi>
 cmake --build <build-dir> --target jamesdsp_hal
 ```
 
-The target emits `libjamesdsp_hal.so` (it cannot be called `libjamesdsp.so` in
-the build tree without colliding with the APK's own library of that name).
-Copy it to `magisk/libs/<abi>/libjamesdsp.so` — renaming as you go, since that
-is the filename the audio server expects — then zip the `magisk/` directory.
+The `jamesdsp_hal` target only exists with `-DDAMONDSP_BUILD_HAL=ON`, so the
+APK build never sees it. It emits `<build-dir>/hal/libjamesdsp.so`. Copy that
+to `magisk/libs/<abi>/libjamesdsp.so`, then zip the `magisk/` directory.
 
 ## Installing
 
