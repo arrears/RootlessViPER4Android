@@ -440,33 +440,39 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
             return -EINVAL;
         }
 
-        c->sampleRate = cfg->inputCfg.samplingRate;
+        const uint32_t newRate = cfg->inputCfg.samplingRate;
         c->channels = 2;
         c->outAccessMode = cfg->outputCfg.accessMode;
 
-        /* This arrives again on every route change, and used to re-initialise
-           an engine that still held everything from last time: every filter,
-           convolver and resampler was leaked, once per headphone plug. Free it
-           first, and zero the struct because Init expects the cleared state
-           EffectCreate's calloc gave it.
-
-           The payload flags have to go with it. They say a subsystem has
-           something loaded behind it, that memory has just been freed, and the
-           whole reason they exist is that enabling one of these with an empty
-           engine "ranges from silent to a crash in the audio server". Leaving
-           them set is the exact condition they were written to prevent. */
+        /* An engine that is already running keeps everything it was given.
+           The server sends SET_CONFIG again whenever it re-plumbs the chain -
+           a new player session gets one straight after the first, differing
+           only in access mode - and rebuilding from scratch here reset every
+           effect to its defaults while the app believed its settings were in
+           place. Which cards "worked" then came down to whether they were
+           touched before or after that second call. A changed rate is applied
+           the way the app's own engine applies one, keeping the settings. */
         if (c->configured)
         {
-            JamesDSPFree(&c->dsp);
-            memset(&c->dsp, 0, sizeof(c->dsp));
-            c->haveIr = c->haveGraphicEq = c->haveDdc = c->haveLiveprog = false;
-            memset(c->haveLiveprogSlot, 0, sizeof(c->haveLiveprogSlot));
-            c->irPartsSeen = c->irParts = c->irChannels = c->irFrames = 0;
-            c->stringIndex = 0;
-            memset(c->hashSlot, 0, sizeof(c->hashSlot));
-            LOGI("SET_CONFIG: previous engine released before re-initialising");
+            if (newRate != c->sampleRate)
+            {
+                JamesDSPSetSampleRate(&c->dsp, (float)newRate, 0);
+                LOGI("SET_CONFIG: rate %u -> %u, settings kept", c->sampleRate, newRate);
+                c->sampleRate = newRate;
+            }
+            else
+                LOGI("SET_CONFIG: same rate, engine and settings kept");
+            if (pReplyData && replySize && *replySize == sizeof(int))
+                *(int *)pReplyData = 0;
+            return 0;
         }
+        c->sampleRate = newRate;
 
+        /* First configuration only: the engine is initialised exactly once per
+           effect, on the cleared state EffectCreate's calloc gave it, and
+           freed in EffectRelease. Re-initialising it here on later calls is
+           what used to leak every filter once per headphone plug, and what
+           then, freed properly, wiped the user's settings instead. */
         JamesDSPInit(&c->dsp, RV4A_BLOCK, c->sampleRate);
         if (!JamesDSPGetMutexStatus(&c->dsp))
             LOGW("SET_CONFIG: engine reports no mutex; concurrent access unsafe");

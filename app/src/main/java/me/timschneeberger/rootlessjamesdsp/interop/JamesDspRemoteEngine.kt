@@ -139,17 +139,17 @@ class JamesDspRemoteEngine(
     // stated plainly so nobody concludes from the old wording that the code is
     // absent. That reading is exactly what left the maximiser dead.
 
-    override fun setBassExciter(enable: Boolean, cutoff: Float, intensity: Float, mix: Float, band2: Boolean, cutoff2: Float, intensity2: Float, mix2: Float): Boolean {
-        return true
-    }
+    // These three, and spectrum extension below, used to return success without
+    // sending anything, so in root mode their cards did nothing at all.
+    override fun setBassExciter(enable: Boolean, cutoff: Float, intensity: Float, mix: Float, band2: Boolean, cutoff2: Float, intensity2: Float, mix2: Float): Boolean =
+        sendForkEffect(PARAM_BASS_EXCITER, enable, floatArrayOf(
+            cutoff, intensity, mix, if (band2) 1f else 0f, cutoff2, intensity2, mix2))
 
-    override fun setVDynBass(enable: Boolean, gain: Float, x1: Float, x2: Float, y1: Float, y2: Float, sgx: Float, sgy: Float): Boolean {
-        return true
-    }
+    override fun setVDynBass(enable: Boolean, gain: Float, x1: Float, x2: Float, y1: Float, y2: Float, sgx: Float, sgy: Float): Boolean =
+        sendForkEffect(PARAM_VDYNBASS, enable, floatArrayOf(gain, x1, x2, y1, y2, sgx, sgy))
 
-    override fun setDiffSurround(enable: Boolean, delayLms: Float, delayRms: Float): Boolean {
-        return true
-    }
+    override fun setDiffSurround(enable: Boolean, delayLms: Float, delayRms: Float): Boolean =
+        sendForkEffect(PARAM_DIFF_SURROUND, enable, floatArrayOf(delayLms, delayRms))
 
     override fun setViperClarity(enable: Boolean, mode: Int, gain: Float): Boolean =
         sendForkEffect(PARAM_CLARITY, enable, floatArrayOf(mode.toFloat(), gain))
@@ -293,10 +293,8 @@ class JamesDspRemoteEngine(
         return effect.setParameterIntArray(PARAM_CHAIN_ORDER, order) == AudioEffect.SUCCESS
     }
 
-    override fun setSpectrumExtension(enable: Boolean, barkFreq: Float, strength: Float): Boolean {
-        // Spectrum extension is unsupported in root/plugin mode (remote engine)
-        return true
-    }
+    override fun setSpectrumExtension(enable: Boolean, barkFreq: Float, strength: Float): Boolean =
+        sendForkEffect(PARAM_SPECTRUM_EXT, enable, floatArrayOf(barkFreq, strength))
 
     override fun setOutputControl(threshold: Float, release: Float, postGain: Float, limiterMode: Int): Boolean {
         // Limiter mode is unsupported in root/plugin mode (remote engine)
@@ -542,6 +540,10 @@ class JamesDspRemoteEngine(
         private const val PARAM_BALANCE = PARAM_FORK_BASE + 21
         private const val PARAM_SUBHARMONIC = PARAM_FORK_BASE + 22
         private const val PARAM_MULTIBAND_DIST = PARAM_FORK_BASE + 23
+        private const val PARAM_BASS_EXCITER = PARAM_FORK_BASE + 24
+        private const val PARAM_VDYNBASS = PARAM_FORK_BASE + 25
+        private const val PARAM_DIFF_SURROUND = PARAM_FORK_BASE + 26
+        private const val PARAM_SPECTRUM_EXT = PARAM_FORK_BASE + 27
         /** Liveprog slot N's script commits at 10020 + N and switches at 26200 + N. */
         private const val PARAM_LIVEPROG_SLOT_COMMIT = 10020
         private const val PARAM_LIVEPROG_SLOT_ENABLE = 26200
