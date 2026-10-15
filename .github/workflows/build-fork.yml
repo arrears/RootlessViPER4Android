@@ -103,7 +103,8 @@ jobs:
             if ! "$BT/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/verify.txt" 2>&1; then
               echo "::error::$apk does not verify"; cat "$RUNNER_TEMP/verify.txt"; fail=1; continue
             fi
-            d=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/verify.txt" | head -1)
+            d=$(grep -i 'certificate SHA-256 digest' "$RUNNER_TEMP/verify.txt" | head -1 | sed 's/.*: *//' | tr -d ': ' | tr 'A-F' 'a-f')
+            [ -n "$d" ] || { echo "::error::no signer digest found for $(basename "$apk")"; cat "$RUNNER_TEMP/verify.txt"; }
             if [ "$d" != "$EXPECTED" ]; then
               echo "::error::$(basename "$apk") is signed with a different key: $d (keystore: $EXPECTED)"; fail=1
             else
