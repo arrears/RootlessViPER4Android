@@ -199,6 +199,9 @@ class JamesDspRemoteEngine(
      */
     private var pendingDyneqBands: FloatArray? = null
 
+    /** The same for multiband distortion's band selection. */
+    private var pendingMbdBands: FloatArray? = null
+
     override fun setTape(enable: Boolean, wow: Float, flutter: Float, saturation: Float, bias: Float, headBump: Float, mix: Float): Boolean =
         sendForkEffect(PARAM_TAPE, enable, floatArrayOf(wow, flutter, saturation, bias, headBump, mix))
 
@@ -245,9 +248,24 @@ class JamesDspRemoteEngine(
         return sendForkEffect(PARAM_DYNAMIC_EQ, enable, payload)
     }
 
-    override fun setMultibandDistBandsInternal(bands: FloatArray?): Boolean = true
+    override fun setMultibandDistBandsInternal(bands: FloatArray?): Boolean {
+        pendingMbdBands = bands
+        return true
+    }
 
-    override fun setMultibandDist(enable: Boolean, routing: Int, model: Int, drive: Float, bias: Float, shape: Float, bits: Float, downsample: Float, tone: Float, bandGain: Float, chorusRate: Float, chorusDepth: Float, chorusFeedback: Float, chorusSpread: Float, chorusVoices: Int, chorusMix: Float, mix: Float): Boolean = true
+    /**
+     * Sixteen settings, the band count, then that many bands of frequency,
+     * gain, q and type. Both of these used to return success without sending
+     * anything, so in root mode the card did nothing at all.
+     */
+    override fun setMultibandDist(enable: Boolean, routing: Int, model: Int, drive: Float, bias: Float, shape: Float, bits: Float, downsample: Float, tone: Float, bandGain: Float, chorusRate: Float, chorusDepth: Float, chorusFeedback: Float, chorusSpread: Float, chorusVoices: Int, chorusMix: Float, mix: Float): Boolean {
+        val bands = pendingMbdBands ?: FloatArray(0)
+        val settings = floatArrayOf(
+            routing.toFloat(), model.toFloat(), drive, bias, shape, bits, downsample,
+            tone, bandGain, chorusRate, chorusDepth, chorusFeedback, chorusSpread,
+            chorusVoices.toFloat(), chorusMix, mix, (bands.size / 4).toFloat())
+        return sendForkEffect(PARAM_MULTIBAND_DIST, enable, settings + bands)
+    }
 
     override fun setEchoDelay(enable: Boolean, input: Float, time: Float, smoothing: Float, offset: Float, keepPitch: Boolean, model: Int, stereo: Float, feedback: Float, cutoff: Float, res: Float, filter: Int, smpRate: Float, bits: Float, modRate: Float, modTime: Float, modCutoff: Float, diffusion: Float, spread: Float, distMode: Int, distLevel: Float, knee: Float, symmetry: Float, tone: Float, wet: Float, dry: Float): Boolean =
         sendForkEffect(PARAM_ECHO_DELAY, enable, floatArrayOf(
@@ -420,7 +438,21 @@ class JamesDspRemoteEngine(
         return effect.setParameter(1210, enable.toShort()) == AudioEffect.SUCCESS
     }
 
-    override fun setLiveprogSlotInternal(slot: Int, enable: Boolean, name: String, script: String): Boolean = true
+    /**
+     * Liveprog slots 2-4 (engine slots 1-3). This used to return success without
+     * sending anything, so in root mode the extra slots never ran. Same order as
+     * the rootless engine: the slot goes off first so it never runs a script that
+     * is half replaced, then the script is sent and the slot switched back on.
+     * The system effect refuses that switch unless the script compiled.
+     */
+    override fun setLiveprogSlotInternal(slot: Int, enable: Boolean, name: String, script: String): Boolean {
+        if (slot !in 1..3) return false
+        val enableId = PARAM_LIVEPROG_SLOT_ENABLE + slot
+        val off = effect.setParameter(enableId, 0.toShort()) == AudioEffect.SUCCESS
+        if (!enable || script.isBlank()) return off
+        effect.setParameterCharBuffer(12001, PARAM_LIVEPROG_SLOT_COMMIT + slot, script)
+        return off and (effect.setParameter(enableId, 1.toShort()) == AudioEffect.SUCCESS)
+    }
 
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean {
         val prevCrc = this.liveprogHash
@@ -509,6 +541,10 @@ class JamesDspRemoteEngine(
         private const val PARAM_VINYL = PARAM_FORK_BASE + 20
         private const val PARAM_BALANCE = PARAM_FORK_BASE + 21
         private const val PARAM_SUBHARMONIC = PARAM_FORK_BASE + 22
+        private const val PARAM_MULTIBAND_DIST = PARAM_FORK_BASE + 23
+        /** Liveprog slot N's script commits at 10020 + N and switches at 26200 + N. */
+        private const val PARAM_LIVEPROG_SLOT_COMMIT = 10020
+        private const val PARAM_LIVEPROG_SLOT_ENABLE = 26200
         /** Enable flags live one hundred above their value id. */
         private const val PARAM_FORK_ENABLE_OFFSET = 100
 

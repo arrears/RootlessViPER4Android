@@ -88,6 +88,8 @@ struct rv4a_context
        these with an empty engine ranges from silent to a crash in the audio
        server, so the enable is refused until its payload has arrived. */
     bool haveIr, haveGraphicEq, haveDdc, haveLiveprog;
+    /* The same for Liveprog slots 1-3; index 0 is unused (slot 0 is above). */
+    bool haveLiveprogSlot[4];
 
     /* Only used when the server asks us to add to its buffer rather than
        overwrite it. Per context, never shared: a buffer shared between effects
@@ -347,9 +349,15 @@ static bool handleBufferedPayload(rv4a_context *c, int32_t id,
             }
             else
             {
+                /* 1 is success here, not 0: the parser hands back the loader's
+                   own result, and the loader returns 1 once both sections have
+                   compiled. 0 means "no @init section", the negatives are
+                   compile failures. Reading 0 as success left every script
+                   that compiled marked as missing, so the enable below was
+                   refused and Liveprog could never be switched on. */
                 const int rc = LiveProgStringParser(&c->dsp, c->stringBuf);
-                c->haveLiveprog = rc == 0;
-                if (rc != 0) LOGE("liveprog rejected the script (%d)", rc);
+                c->haveLiveprog = rc == 1;
+                if (rc != 1) LOGE("liveprog rejected the script (%d)", rc);
             }
             free(c->stringBuf);
             c->stringBuf = nullptr;
@@ -357,6 +365,28 @@ static bool handleBufferedPayload(rv4a_context *c, int32_t id,
         }
         c->stringIndex = 0;
         return true;
+
+    case 10021:     /* commit: liveprog slots 1-3 */
+    case 10022:
+    case 10023:
+    {
+        const int slot = id - 10020;
+        if (c->stringBuf)
+        {
+            c->stringBuf[c->stringCapacity] = '\0';
+            /* A slot is switched off before its script is replaced, by the
+               app; this keeps it off if the new one does not compile. */
+            LiveProgDisableSlot(&c->dsp, slot);
+            const int rc = LiveProgStringParserSlot(&c->dsp, slot, c->stringBuf);
+            c->haveLiveprogSlot[slot] = rc == 1;
+            if (rc != 1) LOGE("liveprog slot %d rejected the script (%d)", slot, rc);
+            free(c->stringBuf);
+            c->stringBuf = nullptr;
+            c->stringCapacity = 0;
+        }
+        c->stringIndex = 0;
+        return true;
+    }
 
     default:
         return false;
@@ -430,6 +460,7 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
             JamesDSPFree(&c->dsp);
             memset(&c->dsp, 0, sizeof(c->dsp));
             c->haveIr = c->haveGraphicEq = c->haveDdc = c->haveLiveprog = false;
+            memset(c->haveLiveprogSlot, 0, sizeof(c->haveLiveprogSlot));
             c->irPartsSeen = c->irParts = c->irChannels = c->irFrames = 0;
             c->stringIndex = 0;
             memset(c->hashSlot, 0, sizeof(c->hashSlot));
@@ -551,7 +582,8 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
            enables these from saved preferences on every sync, which can easily
            run before - or without - the payload ever arriving. */
         if ((id == 1205 && !c->haveIr) || (id == 1210 && !c->haveGraphicEq) ||
-            (id == 1212 && !c->haveDdc) || (id == 1213 && !c->haveLiveprog))
+            (id == 1212 && !c->haveDdc) || (id == 1213 && !c->haveLiveprog) ||
+            (id >= 26201 && id <= 26203 && !c->haveLiveprogSlot[id - 26200]))
         {
             if (on)
             {
@@ -568,8 +600,13 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
            than passing them to the engine keeps that round trip honest. */
         if (id >= 25000 && id <= 25003)
         {
+            /* Kept only for a payload that actually loaded. The app sends the
+               checksum right after the payload whatever became of it, so a
+               script that failed to compile used to be recorded as present,
+               and the app then skipped sending it again on every later sync. */
+            const bool loaded[] = { c->haveGraphicEq, c->haveDdc, c->haveLiveprog, c->haveIr };
             if (p->vsize >= sizeof(int32_t))
-                c->hashSlot[id - 25000] = *(const int32_t *)val;
+                c->hashSlot[id - 25000] = loaded[id - 25000] ? *(const int32_t *)val : 0;
             if (pReplyData && replySize && *replySize == sizeof(int))
                 *(int *)pReplyData = 0;
             return 0;

@@ -23,18 +23,28 @@ static inline void applyParam(JamesDSPLib *d, int32_t id, int16_t sv, bool on,
 {
     switch (id)
     {
-    /* --- enable flags --------------------------------------------------- */
-    case 1200: if (on) CompressorEnable(d, 1); else CompressorEnable(d, 0); break;
+    /* --- enable flags ---------------------------------------------------
+       Off goes through each effect's Disable, never Enable(d, 0). The engine's
+       Enable(d, 0) means "rebuild without switching on": it only ever sets the
+       flag, never clears it, so routing off through it left the compressor,
+       the equaliser, crossfeed and DDC stuck on once enabled, and every sync
+       from the app re-sent the same no-op. */
+    case 1200: if (on) CompressorEnable(d, 1); else CompressorDisable(d); break;
     case 1201: if (on) BassBoostEnable(d); else BassBoostDisable(d); break;
-    case 1202: if (on) MultimodalEqualizerEnable(d, 1); else MultimodalEqualizerEnable(d, 0); break;
+    case 1202: if (on) MultimodalEqualizerEnable(d, 1); else MultimodalEqualizerDisable(d); break;
     case 1203: if (on) ReverbEnable(d); else ReverbDisable(d); break;
     case 1204: if (on) StereoEnhancementEnable(d); else StereoEnhancementDisable(d); break;
     case 1205: if (on) Convolver1DEnable(d); else Convolver1DDisable(d); break;
     case 1206: if (on) VacuumTubeEnable(d); else VacuumTubeDisable(d); break;
-    case 1208: if (on) CrossfeedEnable(d, 1); else CrossfeedEnable(d, 0); break;
+    case 1208: if (on) CrossfeedEnable(d, 1); else CrossfeedDisable(d); break;
     case 1210: if (on) ArbitraryResponseEqualizerEnable(d, 1); else ArbitraryResponseEqualizerDisable(d); break;
-    case 1212: DDCEnable(d, on ? 1 : 0); break;
+    case 1212: if (on) DDCEnable(d, 1); else DDCDisable(d); break;
     case 1213: if (on) LiveProgEnable(d); else LiveProgDisable(d); break;
+    /* Liveprog slots 1-3. Their scripts arrive through the HAL's buffered
+       payload, which also refuses the switch for a slot with nothing loaded. */
+    case 26201: case 26202: case 26203:
+        if (on) LiveProgEnableSlot(d, id - 26200); else LiveProgDisableSlot(d, id - 26200);
+        break;
 
     /* --- values --------------------------------------------------------- */
     case 112: BassBoostSetParam(d, (float)sv); break;                 /* max gain, dB */
@@ -179,6 +189,27 @@ static inline void applyParam(JamesDSPLib *d, int32_t id, int16_t sv, bool on,
             SubHarmonicSetParam(d, fv[0], fv[1], fv[2], (int)(fv[3] + 0.5f));
         break;
     case 26122: if (on) SubHarmonicEnable(d); else SubHarmonicDisable(d); break;
+
+    /* Multiband distortion: sixteen settings, a band count, then that many
+       bands of four (frequency, gain, q, type). The count is clamped before
+       the length it implies is worked out, as for the dynamic EQ above. */
+    case 26023:
+        if (fn >= 17)
+        {
+            int count = (int)(fv[16] + 0.5f);
+            if (count < 0) count = 0;
+            if (count > MBD_MAX_BANDS) count = MBD_MAX_BANDS;
+            if (fn >= 17u + (uint32_t)count * 4u)
+            {
+                MultibandDistSetBands(d, count ? fv + 17 : nullptr, count);
+                MultibandDistSetParam(d, (int)(fv[0] + 0.5f), (int)(fv[1] + 0.5f),
+                                      fv[2], fv[3], fv[4], fv[5], fv[6], fv[7], fv[8],
+                                      fv[9], fv[10], fv[11], fv[12],
+                                      (int)(fv[13] + 0.5f), fv[14], fv[15]);
+            }
+        }
+        break;
+    case 26123: if (on) MultibandDistEnable(d); else MultibandDistDisable(d); break;
 
     /* The maximiser. Present in this build all along - the HAL library is
        compiled from the same source glob as the app's, so maximizer.c has
