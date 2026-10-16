@@ -6,7 +6,9 @@ import me.timschneeberger.rootlessjamesdsp.model.AudioSessionDumpEntry
 import me.timschneeberger.rootlessjamesdsp.model.IEffectSession
 import me.timschneeberger.rootlessjamesdsp.model.rootless.MutedEffectSession
 import me.timschneeberger.rootlessjamesdsp.session.shared.BaseSessionDatabase
+import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.utils.MutedAudioEffectFactory
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.toast
 import timber.log.Timber
 
 class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
@@ -27,6 +29,18 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         "com.kalkiarts.hexabloompro"
     )
 
+    /**
+     * Apps whose audio never reaches the capture although nothing Android
+     * reports says so: their manifest allows playback capture and their streams
+     * carry no no-capture flags, yet the recording stays silent. Spotify is the
+     * known one (also listed as unsupported upstream); checked on a Galaxy S24
+     * Ultra running Android 17, where YouTube Music captured fine alongside it.
+     */
+    private val uncapturablePackages = setOf(
+        "com.spotify.music",
+    )
+    private val warnedUncapturable = mutableSetOf<String>()
+
     override fun shouldAcceptSessionDump(id: Int, session: AudioSessionDumpEntry): Boolean {
         if (!session.isUsageRecordable()) {
             Timber.d("Skipped session $id due to usage ($session)")
@@ -35,7 +49,17 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         return true
     }
 
-    override fun shouldAddSession(id: Int, uid: Int, packageName: String) = true
+    override fun shouldAddSession(id: Int, uid: Int, packageName: String): Boolean {
+        if (packageName !in uncapturablePackages)
+            return true
+        // Muting one of these is what turned "not processed" into "silent": its
+        // own output was switched off, and the capture that should have carried
+        // it on received nothing. Left alone, it at least plays unprocessed.
+        Timber.d("Not muting session $id of $packageName: its audio cannot be captured")
+        if (warnedUncapturable.add(packageName))
+            context.toast(context.getString(R.string.rootless_app_uncapturable, packageName))
+        return false
+    }
 
     override fun createSession(id: Int, uid: Int, packageName: String): MutedEffectSession? {
         val muteEffect = factory.make(id, packageName)
