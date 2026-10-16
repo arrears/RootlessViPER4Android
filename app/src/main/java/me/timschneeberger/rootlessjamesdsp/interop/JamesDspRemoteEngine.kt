@@ -40,7 +40,7 @@ class JamesDspRemoteEngine(
                 Constants.ACTION_SAMPLE_RATE_UPDATED -> syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
                 Constants.ACTION_PREFERENCES_UPDATED -> syncWithPreferences()
                 Constants.ACTION_SERVICE_RELOAD_LIVEPROG -> syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG, Constants.PREF_LIVEPROG2, Constants.PREF_LIVEPROG3, Constants.PREF_LIVEPROG4))
-                Constants.ACTION_SERVICE_HARD_REBOOT_CORE -> rebootEngine()
+                Constants.ACTION_SERVICE_HARD_REBOOT_CORE -> { rebootEngine(); syncWithPreferences() }
                 Constants.ACTION_SERVICE_SOFT_REBOOT_CORE -> { clearCache(); syncWithPreferences() }
             }
         }
@@ -48,8 +48,11 @@ class JamesDspRemoteEngine(
 
     var effect: AudioEffectHidden? = createEffect()
 
+    /** What the user asked for, kept so a replacement effect can be put back the same way. */
+    private var wantEnabled = false
+
     override var enabled: Boolean
-        set(value) { effect?.enabled = value }
+        set(value) { wantEnabled = value; effect?.enabled = value }
         get() = effect?.enabled ?: false
 
     override var sampleRate: Float
@@ -81,20 +84,31 @@ class JamesDspRemoteEngine(
         }
     }
 
-    private fun checkEngine() {
+    /** @return true if the effect had died and was replaced */
+    private fun checkEngine(): Boolean {
         if (!isPidValid) {
             Timber.e("PID ($pid) for session $sessionId invalid. Engine probably crashed or detached.")
-            context.toast("Engine crashed. Rebooting JamesDSP.", false)
+            context.toast("Audio engine restarted; reattaching Damon DSP.", false)
             rebootEngine()
+            return true
         }
 
         if (isSampleRateAbnormal) {
             Timber.e("PID ($pid) for session $sessionId invalid. Engine crashed.")
             context.toast("Abnormal sampling rate. Rebooting JamesDSP.", false)
             rebootEngine()
+            return true
         }
+        return false
     }
 
+    /**
+     * Replaces a dead effect with a working one. The replacement used to come
+     * back switched off - a new AudioEffect always starts disabled - and empty:
+     * the preference cache still listed every setting as sent, so the next sync
+     * pushed only what had changed since. The engine looked reattached and did
+     * nothing until the user happened to touch every card.
+     */
     private fun rebootEngine() {
         try {
             effect?.release()
@@ -106,6 +120,21 @@ class JamesDspRemoteEngine(
             effect = null
             return
         }
+        effect?.enabled = wantEnabled
+        clearCache()
+    }
+
+    /**
+     * Checked on every playback change rather than only when a setting changes.
+     * When the audio server restarts every effect it held dies with it, while
+     * the players reconnect under the same session ids - so nothing else would
+     * notice, and processing stayed off until the next pause and play.
+     */
+    fun ensureAlive() {
+        if (effect == null)
+            return
+        if (checkEngine())
+            syncWithPreferences()
     }
 
     override fun syncWithPreferences(forceUpdateNamespaces: Array<String>?) {
@@ -139,17 +168,17 @@ class JamesDspRemoteEngine(
     // stated plainly so nobody concludes from the old wording that the code is
     // absent. That reading is exactly what left the maximiser dead.
 
-    override fun setBassExciter(enable: Boolean, cutoff: Float, intensity: Float, mix: Float, band2: Boolean, cutoff2: Float, intensity2: Float, mix2: Float): Boolean {
-        return true
-    }
+    // These three, and spectrum extension below, used to return success without
+    // sending anything, so in root mode their cards did nothing at all.
+    override fun setBassExciter(enable: Boolean, cutoff: Float, intensity: Float, mix: Float, band2: Boolean, cutoff2: Float, intensity2: Float, mix2: Float): Boolean =
+        sendForkEffect(PARAM_BASS_EXCITER, enable, floatArrayOf(
+            cutoff, intensity, mix, if (band2) 1f else 0f, cutoff2, intensity2, mix2))
 
-    override fun setVDynBass(enable: Boolean, gain: Float, x1: Float, x2: Float, y1: Float, y2: Float, sgx: Float, sgy: Float): Boolean {
-        return true
-    }
+    override fun setVDynBass(enable: Boolean, gain: Float, x1: Float, x2: Float, y1: Float, y2: Float, sgx: Float, sgy: Float): Boolean =
+        sendForkEffect(PARAM_VDYNBASS, enable, floatArrayOf(gain, x1, x2, y1, y2, sgx, sgy))
 
-    override fun setDiffSurround(enable: Boolean, delayLms: Float, delayRms: Float): Boolean {
-        return true
-    }
+    override fun setDiffSurround(enable: Boolean, delayLms: Float, delayRms: Float): Boolean =
+        sendForkEffect(PARAM_DIFF_SURROUND, enable, floatArrayOf(delayLms, delayRms))
 
     override fun setViperClarity(enable: Boolean, mode: Int, gain: Float): Boolean =
         sendForkEffect(PARAM_CLARITY, enable, floatArrayOf(mode.toFloat(), gain))
@@ -199,6 +228,9 @@ class JamesDspRemoteEngine(
      */
     private var pendingDyneqBands: FloatArray? = null
 
+    /** The same for multiband distortion's band selection. */
+    private var pendingMbdBands: FloatArray? = null
+
     override fun setTape(enable: Boolean, wow: Float, flutter: Float, saturation: Float, bias: Float, headBump: Float, mix: Float): Boolean =
         sendForkEffect(PARAM_TAPE, enable, floatArrayOf(wow, flutter, saturation, bias, headBump, mix))
 
@@ -213,6 +245,9 @@ class JamesDspRemoteEngine(
     override fun setExciter(enable: Boolean, f1: Float, f2: Float, f3: Float, a1: Float, a2: Float, a3: Float, a4: Float, character: Int, drive: Float, mix: Float): Boolean =
         sendForkEffect(PARAM_EXCITER, enable, floatArrayOf(
             f1, f2, f3, a1, a2, a3, a4, character.toFloat(), drive, mix))
+
+    override fun setSubHarmonic(enable: Boolean, mixDb: Float, sweepHz: Float, wideOct: Float, dynamic: Boolean): Boolean =
+        sendForkEffect(PARAM_SUBHARMONIC, enable, floatArrayOf(mixDb, sweepHz, wideOct, if (dynamic) 1f else 0f))
 
     override fun setLowEnd(enable: Boolean, subsonic: Float, weightHz: Float, weightDb: Float, mudHz: Float, mudDb: Float, mix: Float): Boolean =
         sendForkEffect(PARAM_LOWEND, enable, floatArrayOf(
@@ -242,9 +277,24 @@ class JamesDspRemoteEngine(
         return sendForkEffect(PARAM_DYNAMIC_EQ, enable, payload)
     }
 
-    override fun setMultibandDistBandsInternal(bands: FloatArray?): Boolean = true
+    override fun setMultibandDistBandsInternal(bands: FloatArray?): Boolean {
+        pendingMbdBands = bands
+        return true
+    }
 
-    override fun setMultibandDist(enable: Boolean, routing: Int, model: Int, drive: Float, bias: Float, shape: Float, bits: Float, downsample: Float, tone: Float, bandGain: Float, chorusRate: Float, chorusDepth: Float, chorusFeedback: Float, chorusSpread: Float, chorusVoices: Int, chorusMix: Float, mix: Float): Boolean = true
+    /**
+     * Sixteen settings, the band count, then that many bands of frequency,
+     * gain, q and type. Both of these used to return success without sending
+     * anything, so in root mode the card did nothing at all.
+     */
+    override fun setMultibandDist(enable: Boolean, routing: Int, model: Int, drive: Float, bias: Float, shape: Float, bits: Float, downsample: Float, tone: Float, bandGain: Float, chorusRate: Float, chorusDepth: Float, chorusFeedback: Float, chorusSpread: Float, chorusVoices: Int, chorusMix: Float, mix: Float): Boolean {
+        val bands = pendingMbdBands ?: FloatArray(0)
+        val settings = floatArrayOf(
+            routing.toFloat(), model.toFloat(), drive, bias, shape, bits, downsample,
+            tone, bandGain, chorusRate, chorusDepth, chorusFeedback, chorusSpread,
+            chorusVoices.toFloat(), chorusMix, mix, (bands.size / 4).toFloat())
+        return sendForkEffect(PARAM_MULTIBAND_DIST, enable, settings + bands)
+    }
 
     override fun setEchoDelay(enable: Boolean, input: Float, time: Float, smoothing: Float, offset: Float, keepPitch: Boolean, model: Int, stereo: Float, feedback: Float, cutoff: Float, res: Float, filter: Int, smpRate: Float, bits: Float, modRate: Float, modTime: Float, modCutoff: Float, diffusion: Float, spread: Float, distMode: Int, distLevel: Float, knee: Float, symmetry: Float, tone: Float, wet: Float, dry: Float): Boolean =
         sendForkEffect(PARAM_ECHO_DELAY, enable, floatArrayOf(
@@ -272,10 +322,8 @@ class JamesDspRemoteEngine(
         return effect.setParameterIntArray(PARAM_CHAIN_ORDER, order) == AudioEffect.SUCCESS
     }
 
-    override fun setSpectrumExtension(enable: Boolean, barkFreq: Float, strength: Float): Boolean {
-        // Spectrum extension is unsupported in root/plugin mode (remote engine)
-        return true
-    }
+    override fun setSpectrumExtension(enable: Boolean, barkFreq: Float, strength: Float): Boolean =
+        sendForkEffect(PARAM_SPECTRUM_EXT, enable, floatArrayOf(barkFreq, strength))
 
     override fun setOutputControl(threshold: Float, release: Float, postGain: Float, limiterMode: Int): Boolean {
         // Limiter mode is unsupported in root/plugin mode (remote engine)
@@ -417,7 +465,21 @@ class JamesDspRemoteEngine(
         return effect.setParameter(1210, enable.toShort()) == AudioEffect.SUCCESS
     }
 
-    override fun setLiveprogSlotInternal(slot: Int, enable: Boolean, name: String, script: String): Boolean = true
+    /**
+     * Liveprog slots 2-4 (engine slots 1-3). This used to return success without
+     * sending anything, so in root mode the extra slots never ran. Same order as
+     * the rootless engine: the slot goes off first so it never runs a script that
+     * is half replaced, then the script is sent and the slot switched back on.
+     * The system effect refuses that switch unless the script compiled.
+     */
+    override fun setLiveprogSlotInternal(slot: Int, enable: Boolean, name: String, script: String): Boolean {
+        if (slot !in 1..3) return false
+        val enableId = PARAM_LIVEPROG_SLOT_ENABLE + slot
+        val off = effect.setParameter(enableId, 0.toShort()) == AudioEffect.SUCCESS
+        if (!enable || script.isBlank()) return off
+        effect.setParameterCharBuffer(12001, PARAM_LIVEPROG_SLOT_COMMIT + slot, script)
+        return off and (effect.setParameter(enableId, 1.toShort()) == AudioEffect.SUCCESS)
+    }
 
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean {
         val prevCrc = this.liveprogHash
@@ -505,6 +567,15 @@ class JamesDspRemoteEngine(
         private const val PARAM_MAXIMIZER = PARAM_FORK_BASE + 19
         private const val PARAM_VINYL = PARAM_FORK_BASE + 20
         private const val PARAM_BALANCE = PARAM_FORK_BASE + 21
+        private const val PARAM_SUBHARMONIC = PARAM_FORK_BASE + 22
+        private const val PARAM_MULTIBAND_DIST = PARAM_FORK_BASE + 23
+        private const val PARAM_BASS_EXCITER = PARAM_FORK_BASE + 24
+        private const val PARAM_VDYNBASS = PARAM_FORK_BASE + 25
+        private const val PARAM_DIFF_SURROUND = PARAM_FORK_BASE + 26
+        private const val PARAM_SPECTRUM_EXT = PARAM_FORK_BASE + 27
+        /** Liveprog slot N's script commits at 10020 + N and switches at 26200 + N. */
+        private const val PARAM_LIVEPROG_SLOT_COMMIT = 10020
+        private const val PARAM_LIVEPROG_SLOT_ENABLE = 26200
         /** Enable flags live one hundred above their value id. */
         private const val PARAM_FORK_ENABLE_OFFSET = 100
 
@@ -528,7 +599,11 @@ class JamesDspRemoteEngine(
                             // dropped silently at that end and the app has no
                             // way to notice, so the user moved sliders that
                             // could not do anything and nothing said why.
-                            name.contains("RootlessViPER4Android") -> PluginState.Available
+                            // The Damon DSP engine, or the RootlessViPER4Android
+                            // one it was forked from: same parameter ids, so a
+                            // module flashed before the rename still counts.
+                            name.contains("Damon DSP") ||
+                                name.contains("RootlessViPER4Android") -> PluginState.Available
                             else -> {
                                 Timber.w("isPluginInstalled: a different engine answers to this uuid: '$name'")
                                 PluginState.Foreign

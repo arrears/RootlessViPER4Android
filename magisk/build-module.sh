@@ -20,7 +20,8 @@ for ABI in arm64-v8a armeabi-v7a x86_64 x86; do
   cmake -S app/src/main/cpp -B "$BUILD" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
         -DANDROID_ABI="$ABI" \
-        -DANDROID_PLATFORM=android-26
+        -DANDROID_PLATFORM=android-26 \
+        -DDAMONDSP_BUILD_HAL=ON
   cmake --build "$BUILD" --target jamesdsp_hal
   mkdir -p "$OUT/libs/$ABI"
   # Renamed here: the target can't be called libjamesdsp.so in the build tree
@@ -39,9 +40,35 @@ done
 # post-fs-data.sh is the boot safety net - it quarantines a bad audio config
 # before the audio server starts. Leaving it out of the package would ship the
 # module without its only defence against an unrecoverable bootloop.
-cp magisk/module.prop magisk/customize.sh magisk/service.sh \
+# post-mount.sh is what gets /vendor mounted where the root manager's own
+# mount drops it; without it the engine never reaches the vendor audio config.
+cp magisk/customize.sh magisk/service.sh magisk/post-mount.sh \
    magisk/post-fs-data.sh magisk/README.md magisk/STOCK-BASELINE.md "$OUT/"
 mkdir -p "$OUT/common"; cp -r magisk/common/. "$OUT/common/"
+
+# module.prop is stamped from the app's own version as it is packaged, so the
+# module can never again lag the app: it sat at v3.35.0 while the app was on
+# 4.0.0, and a module whose version does not move is one the manager will not
+# offer to update. The committed file is expected to say the same thing;
+# ci/check-module.sh fails the build if it does not.
+APP_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' buildSrc/src/main/kotlin/AndroidConfig.kt | head -1)
+APP_CODE=$(sed -n 's/.*versionCode *= *\([0-9][0-9]*\).*/\1/p' buildSrc/src/main/kotlin/AndroidConfig.kt | head -1)
+[ -n "$APP_NAME" ] && [ -n "$APP_CODE" ] || { echo "could not read the app version from AndroidConfig.kt" >&2; exit 1; }
+sed -e "s/^version=.*/version=v$APP_NAME/" -e "s/^versionCode=.*/versionCode=$APP_CODE/" \
+    magisk/module.prop > "$OUT/module.prop"
+grep -q "^version=v$APP_NAME\$" "$OUT/module.prop" && grep -q "^versionCode=$APP_CODE\$" "$OUT/module.prop" ||
+  { echo "module.prop did not take the app version" >&2; exit 1; }
+echo "module.prop: v$APP_NAME ($APP_CODE)"
+
+# The rooted app rides inside the module when the caller hands one over, so a
+# single flash installs both the engine and the app that drives it. CI passes
+# the release-signed arm64 rootful APK; a local build without one still
+# produces a complete engine-only module.
+if [ -n "${DAMONDSP_ROOTFUL_APK:-}" ]; then
+  [ -f "$DAMONDSP_ROOTFUL_APK" ] || { echo "DAMONDSP_ROOTFUL_APK=$DAMONDSP_ROOTFUL_APK is not a file" >&2; exit 1; }
+  cp "$DAMONDSP_ROOTFUL_APK" "$OUT/DamonDSP-rootful.apk"
+  echo "bundled app: $(basename "$DAMONDSP_ROOTFUL_APK") ($(wc -c < "$OUT/DamonDSP-rootful.apk") bytes)"
+fi
 
 # A single carriage return in any of these is not cosmetic. post-fs-data.sh
 # would create a file named "disable" with a CR on the end, which Magisk does
@@ -64,5 +91,5 @@ echo "scripts verified: unix line endings, valid shell"
 # zip -r keeps forward slashes. Windows' Compress-Archive does not, and a module
 # zipped that way installs as files with literal backslashes in their names
 # instead of directories, so it silently does nothing.
-( cd "$OUT" && zip -qr ../rv4a-engine-module.zip . )
-echo "packaged: build/rv4a-engine-module.zip"
+( cd "$OUT" && zip -qr ../damondsp-engine-module.zip . )
+echo "packaged: build/damondsp-engine-module.zip"

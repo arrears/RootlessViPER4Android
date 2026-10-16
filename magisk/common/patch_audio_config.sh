@@ -79,6 +79,28 @@ strip_ours() {
   esac
 }
 
+# Size and line count of the device's own config, which is what post-fs-data.sh
+# compares against at every boot, before our copy is mounted. Measuring the
+# file as we see it was right only while nothing of ours was mounted over it:
+# on an upgrade over a working install the file we read IS our copy, so the
+# fingerprint described our patch, the next boot found the real file did not
+# match, and the config was set aside as stale from a system update. Prefer
+# the installed module's own record of the real file; failing that, measure
+# the file with our lines taken back out, which is what it was underneath.
+source_fingerprint() {
+  if grep -q "$EFFECT_UUID" "$1" 2>/dev/null; then
+    old=/data/adb/modules/damondsp_engine/.source_config
+    if [ -f "$old" ] && read -r osrc osize olines < "$old" &&
+       [ "$osrc" = "$1" ] && [ -n "$osize" ] && [ -n "$olines" ]; then
+      echo "$osize $olines"
+      return
+    fi
+    echo "$(strip_ours "$1" | wc -c) $(strip_ours "$1" | wc -l)"
+  else
+    echo "$(wc -c < "$1") $(wc -l < "$1")"
+  fi
+}
+
 validate_xml() {
   grep -q "$EFFECT_UUID" "$1" &&
   grep -q "name=\"$LIB_NAME\"" "$1" &&
@@ -175,7 +197,7 @@ patch_audio_config() {
       # ones it removed would come back pointing at libraries that no longer
       # exist. Nothing else here would notice, because our own entries are
       # still perfectly well formed.
-      echo "$cfg $(wc -c < "$cfg") $(wc -l < "$cfg")" > "$MODPATH/.source_config"
+      echo "$cfg $(source_fingerprint "$cfg")" > "$MODPATH/.source_config"
       found=1
       # One config is what the loader reads. Patching every candidate we can
       # find multiplies the chance of a duplicate registration for no gain.

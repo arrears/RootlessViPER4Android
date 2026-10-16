@@ -10,6 +10,33 @@ static LiveProg *LiveProgSlot(JamesDSPLib *jdsp, int slot)
 		return &jdsp->eel;
 	return &jdsp->eelExtra[slot - 1];
 }
+/* A script engine is about 160 MB of address space - its RAM array alone is
+   64 MB - and there are four per engine. Making all four up front put some
+   650 MB on every instance, whether Liveprog was used or not, so a 32-bit
+   audio HAL ran out after six instances and the seventh crashed writing
+   through the null that NSEEL_VM_regvar hands back. Each one is now made when
+   a script is first loaded into its slot, and a failure to make it is a
+   failure to load that script, not a crash. */
+static int LiveProgEnsureVm(JamesDSPLib *jdsp, LiveProg *pg)
+{
+	if (pg->vm)
+		return 1;
+	pg->vm = NSEEL_VM_alloc();
+	if (!pg->vm)
+		return 0;
+	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
+	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
+	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
+	if (!pg->vmFs || !pg->input1 || !pg->input2)
+	{
+		NSEEL_VM_free(pg->vm);
+		pg->vm = 0;
+		pg->vmFs = pg->input1 = pg->input2 = 0;
+		return 0;
+	}
+	*pg->vmFs = jdsp->fs;
+	return 1;
+}
 void LiveProgConstructorSlot(JamesDSPLib *jdsp, int slot)
 {
 	LiveProg *pg = LiveProgSlot(jdsp, slot);
@@ -17,11 +44,8 @@ void LiveProgConstructorSlot(JamesDSPLib *jdsp, int slot)
 	pg->compileSucessfully = 0;
 	pg->codehandleInit = 0;
 	pg->codehandleProcess = 0;
-	pg->vm = NSEEL_VM_alloc(); // create virtual machine
-	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
-	*pg->vmFs = jdsp->fs;
-	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
-	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
+	pg->vm = 0;
+	pg->vmFs = pg->input1 = pg->input2 = 0;
 }
 void LiveProgDestructorSlot(JamesDSPLib *jdsp, int slot)
 {
@@ -83,14 +107,18 @@ static int LiveProgLoadCodeSlot(JamesDSPLib *jdsp, int slot, char *codeTextInit,
 {
 	LiveProg *pg = LiveProgSlot(jdsp, slot);
 	pg->compileSucessfully = 0;
+	if (!LiveProgEnsureVm(jdsp, pg))
+		return -1;
 	compileContext *ctx = (compileContext*)pg->vm;
 	NSEEL_VM_freevars(pg->vm);
 	NSEEL_init_memRegion(pg->vm);
 	memset(ctx->ram_state, 0, sizeof(ctx->ram_state));
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
-	*pg->vmFs = jdsp->fs;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
+	if (!pg->vmFs || !pg->input1 || !pg->input2)
+		return -1;
+	*pg->vmFs = jdsp->fs;
 	if (pg->codehandleInit)
 	{
 		NSEEL_code_free(pg->codehandleInit);

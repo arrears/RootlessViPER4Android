@@ -55,9 +55,17 @@ target_link_libraries( # Specifies the target library.
 #
 # Not linked into the APK: this builds the same DSP core as a HAL audio effect
 # so a Magisk module can install it into /system/lib*/soundfx, which is what
-# makes root mode run this fork's engine rather than the stock one. Excluded
-# from the default build so ordinary APK builds are unaffected.
+# makes root mode run this fork's engine rather than the stock one.
+#
+# Only defined when magisk/build-module.sh asks for it. EXCLUDE_FROM_ALL was
+# not enough: the Android Gradle plugin builds every shared library target it
+# finds, ignoring that flag, and copies them all into one directory by file
+# name. This one is also libjamesdsp.so, so it overwrote the app's own and the
+# APK shipped the effect library, which exports none of the JamesDSP* symbols
+# the wrapper links against. The app then crashed on start.
 # ---------------------------------------------------------------------------
+option(DAMONDSP_BUILD_HAL "Build the system-wide effect library for the Magisk module" OFF)
+if(DAMONDSP_BUILD_HAL)
 add_library(
         jamesdsp_hal
         SHARED
@@ -101,3 +109,4 @@ target_link_options(jamesdsp_hal PRIVATE
 set_target_properties(jamesdsp_hal PROPERTIES
         OUTPUT_NAME jamesdsp
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/hal")
+endif()

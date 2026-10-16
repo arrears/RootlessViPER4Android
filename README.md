@@ -1,24 +1,25 @@
 <h1 align="center">
   <img alt="Icon" width="75" src="img/icons/web/icon-192.png?raw=true">
   <br>
-  RootlessViPER4Android
+  Damon DSP
   <br>
 </h1>
-<h4 align="center">RootlessViPER4Android (RV4A) — a RootlessJamesDSP fork<br>ViPER4Android effects natively ported to Android — <b>no root required</b>.</h4>
+<h4 align="center">Damon DSP — a personal-use fork of RootlessViPER4Android (itself a RootlessJamesDSP fork)<br>ViPER4Android effects natively ported to Android, plus an adaptive bass stack and a chain builder — rooted or <b>no root required</b>.</h4>
 
 <p align="center">
-  <a href="https://github.com/alienware377/RootlessViPER4Android/actions/workflows/build-fork.yml">
-      <img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/alienware377/RootlessViPER4Android/build-fork.yml?branch=viper-extras">
+  <a href="https://github.com/arrears/RootlessViPER4Android/actions/workflows/build-fork.yml">
+      <img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/arrears/RootlessViPER4Android/build-fork.yml?branch=damon-dsp">
   </a>
-  <a href="https://github.com/alienware377/RootlessViPER4Android/releases">
-      <img alt="Release" src="https://img.shields.io/github/v/release/alienware377/RootlessViPER4Android?include_prereleases">
+  <a href="https://github.com/arrears/RootlessViPER4Android/releases">
+      <img alt="Release" src="https://img.shields.io/github/v/release/arrears/RootlessViPER4Android?include_prereleases">
   </a>
   <a href="LICENSE">
-      <img alt="License" src="https://img.shields.io/github/license/alienware377/RootlessViPER4Android">
+      <img alt="License" src="https://img.shields.io/github/license/arrears/RootlessViPER4Android">
   </a>
 </p>
 
 <p align="center">
+  <a href="#-damon-dsp">Damon DSP</a> •
   <a href="#-features">Features</a> •
   <a href="#-download--install">Download</a> •
   <a href="#-limitations">Limitations</a> •
@@ -28,7 +29,22 @@
 
 ---
 
-**RootlessViPER4Android** (RootlessJamesDSP — ViPER4Android Edition) is a system-wide **Android equalizer and audio effects app** that brings the beloved **ViPER4Android (V4A)** sound experience to **non-rooted phones**. It combines the powerful open-source **JamesDSP** engine with native re-implementations of ViPER's classic effects — Dynamic System, ViPER Bass, ViPER Clarity, Spectrum Extension, Field Surround, Tube Simulator (6N1J) and many more — all running **without root, without Magisk, and without custom ROMs**.
+## 🎯 Damon DSP
+
+**Damon DSP** is a personal-use fork of [RootlessViPER4Android](https://github.com/alienware377/RootlessViPER4Android) (alienware377's ViPER4Android edition of RootlessJamesDSP). It keeps everything that fork ships and rebuilds it into a toggleable, chain-configurable DSP suite driven by one brief: bass that adapts itself per track, a Dolby-alike mode, "Clean" band-limited variants of every stock effect, and a full chain builder. Every stage is its own on/off toggle, off means true pass-through, nothing resamples or forces 48 kHz, and all coefficients come from the runtime sample rate (up to 192 kHz on rooted devices).
+
+One shared engine (`libjamesdsp`) ships two ways from the same repository and the same GitHub Actions run:
+
+| Build | Package | Targets |
+|---|---|---|
+| **Rootless APK** — app label *Damon DSP* | `com.arrears.damondsp.rootless` | Unrooted Android 10+ (Samsung Galaxy S24 Ultra) via AudioPlaybackCapture / Shizuku |
+| **Rooted APK + Magisk module** — app label *Damon DSP (Root)* | `com.arrears.damondsp.rootful`, module id `damondsp_engine` | LG V40 (Android 11), Redmi Note 10 Pro (Android 12), system-wide at the mixer's native rate |
+
+Feature-by-feature progress against the brief is tracked in [docs/DAMON-DSP-STATUS.md](docs/DAMON-DSP-STATUS.md).
+
+---
+
+**Damon DSP** is a system-wide **Android equalizer and audio effects app** that brings the beloved **ViPER4Android (V4A)** sound experience to **non-rooted phones**, and to rooted ones through its own Magisk module. It combines the powerful open-source **JamesDSP** engine with native re-implementations of ViPER's classic effects — Dynamic System, ViPER Bass, ViPER Clarity, Spectrum Extension, Field Surround, Tube Simulator (6N1J) and many more — all running **without root, without Magisk, and without custom ROMs** in the rootless build.
 
 Beyond the ViPER suite, it adds a **fully reorderable DSP chain**, so you decide the order every effect runs in, with the output limiter always kept last. An **interactive parametric equalizer** lets you drag bands directly on the response curve, add or remove them with a long press, and fine-tune frequency, Q and gain on rotary controls with full undo. A **studio-grade echo/delay** offers mono, stereo and ping-pong modes with a filtered feedback path, sample-rate and bit-depth crushing, tape-style modulation, diffusion and feedback distortion — all laid out on a knob panel that reflows to fit any screen. **Up to four Liveprog (EEL2) scripts** can be chained together and picked in one multi-select pass, and **446 official ViPER DDC profiles** are bundled and ready to load.
 
@@ -93,8 +109,8 @@ Output limiter (with selectable peak / soft-saturation modes), auto-loudness com
 - 🪄 Smart UI: Dynamic System custom sliders only appear in Custom mode; irrelevant controls stay hidden
 - 🗂 All ViPER-equivalent sections renamed to their **authentic V4A titles** and reordered into the classic V4A layout under a dedicated header
 - ➖ Removed the redundant Parametric EQ card (Arbitrary-response/graphic EQ covers it)
-- 📛 App renamed to **RootlessViPER4Android** (installs alongside the original RootlessJamesDSP)
-- 🆔 From **v3.35.0** the package is this project's own — `com.alienware377.viper4android.rootless`, and `com.alienware377.viper4android.rootful` for the rooted build. Earlier releases still carried upstream's `me.timschneeberger.rootlessjamesdsp`, which this fork stopped being a long time ago. The rooted build is now called **RootfulViPER4Android** rather than confusingly shipping "Rootless" in its own name
+- 📛 App renamed to **Damon DSP** from v4.1.0 (previously RootlessViPER4Android from v3.35.0; installs alongside the original RootlessJamesDSP)
+- 🆔 From **v4.1.0** the package is `com.arrears.damondsp.rootless`, and `com.arrears.damondsp.rootful` for the rooted build (labelled *Damon DSP (Root)*). v3.35.0 to v4.0.0 used `com.alienware377.viper4android.rootless` / `.rootful`; earlier releases still carried upstream's `me.timschneeberger.rootlessjamesdsp`
 
 ## 🗺 Roadmap
 
@@ -123,7 +139,7 @@ Output limiter (with selectable peak / soft-saturation modes), auto-loudness com
 - ~~**Mid/side modes**~~ — the dynamic EQ can be pointed at the centre of the image or at its edges, so a de-esser can catch a vocal without dulling the reverb around it; the untouched half comes through bit-for-bit
 - ~~**Exciter**~~ — four ranges, each with its own amount, and five characters: three symmetrical ones that add odd harmonics and two lopsided ones that add even harmonics, which is the difference between a transistor sound and a valve one. The older two-band Bass exciter card is left in place so existing setups keep working
 - ~~**Vintage tape**~~ — wow and flutter as a genuinely modulated delay rather than a phase trick, gentle tape saturation, a bias control that runs the right way round (down is brighter and grittier, up is duller), and the head bump that makes tape masters sound weightier
-- ~~**Rooted mode**~~ — a Magisk module carrying this fork's own engine as a system-wide audio effect, so rooted devices run these effects rather than the stock JamesDSP set. Ships as **RootfulViPER4Android**, a separate app that installs alongside the rootless one. Legacy effect HAL, so Android 14 and below
+- ~~**Rooted mode**~~ — a Magisk module carrying this fork's own engine as a system-wide audio effect, so rooted devices run these effects rather than the stock JamesDSP set. Ships as **Damon DSP (Root)**, a separate app that installs alongside the rootless one. Legacy effect HAL, so Android 14 and below
 
 ### 🔜 Planned
 
@@ -138,18 +154,18 @@ Output limiter (with selectable peak / soft-saturation modes), auto-loudness com
 - **Remember effect on/off states** across a ViPER4Android-only mode round trip — your settings already survive, but effects switched off by the mode stay off when you leave it
 
 ## 📲 Download & Install
-1. Grab the latest APK from the [**Releases**](https://github.com/alienware377/RootlessViPER4Android/releases) page (or fresh builds from [Actions](https://github.com/alienware377/RootlessViPER4Android/actions)).
+1. Grab the latest APK from the [**Releases**](https://github.com/arrears/RootlessViPER4Android/releases) page (or fresh builds from [Actions](https://github.com/arrears/RootlessViPER4Android/actions): every run uploads `DamonDSP-rootless-apk`, `DamonDSP-rootful-apk` and `DamonDSP-magisk-module`).
 2. Install and follow the in-app onboarding — it walks you through the permission setup step-by-step.
 3. Play music, open the app, and start flipping switches 🎶
 
 Installs **alongside** the original RootlessJamesDSP as a separate app — keep both or remove the original, your choice.
 
-> ### ⚠️ Upgrading from v2.8.2 or earlier
-> v3.35.0 changes the package name, so Android treats it as a new app: it **installs alongside your existing copy instead of updating it**, and settings do not carry across on their own.
+> ### ⚠️ Upgrading from RootlessViPER4Android (v4.0.0 or earlier)
+> v4.1.0 changes the package name to Damon DSP's own, so Android treats it as a new app: it **installs alongside your existing copy instead of updating it**, and settings do not carry across on their own.
 >
-> **Back up first.** In the old app: *Settings → Backup & restore → Create backup*. Install v3.35.0, then restore that file in the new app. Your presets, card layout and every effect setting come across intact. Once you are happy, uninstall the old one.
+> **Back up first.** In the old app: *Settings → Backup & restore → Create backup*. Install Damon DSP, then restore that file in the new app. Your presets, card layout and every effect setting come across intact. Once you are happy, uninstall the old one.
 
-Rooted? Grab **RootfulViPER4Android** and the Magisk module from the same release. It is a separate app again, so it sits happily beside the rootless build.
+Rooted? Grab **Damon DSP (Root)** and the `damondsp-engine-module.zip` Magisk module from the same run. The download is double-zipped: unzip once, then flash the inner zip in Magisk. The module replaces the old `rv4a_engine` module on its own (the old one is flagged for removal on the reboot the install asks for). It is a separate app again, so it sits happily beside the rootless build.
 
 ## ⚠️ Limitations
 Rootless audio capture on Android has inherent restrictions (inherited from upstream RootlessJamesDSP):

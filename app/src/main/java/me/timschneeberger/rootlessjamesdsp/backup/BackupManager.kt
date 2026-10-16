@@ -47,7 +47,7 @@ class BackupManager(private val context: Context): KoinComponent {
 
                         // Delete older backups
                         val numberOfBackups = preferences.get<String>(R.string.key_backup_maximum).toIntOrNull() ?: 2
-                        val backupRegex = Regex("""jamesdsp_backup_\d+-\d+-\d+_\d+-\d+.tar.gz""")
+                        val backupRegex = Regex("""(damondsp|jamesdsp)_backup_\d+-\d+-\d+_\d+-\d+.tar.gz""")
                         dir.listFiles { _, filename -> backupRegex.matches(filename) }
                             .orEmpty()
                             .sortedByDescending { it.name }
@@ -182,7 +182,7 @@ class BackupManager(private val context: Context): KoinComponent {
 
         fun getBackupFilename(): String {
             val date = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault()).format(Date())
-            return "jamesdsp_backup_$date.tar.gz"
+            return "damondsp_backup_$date.tar.gz"
         }
     }
 }

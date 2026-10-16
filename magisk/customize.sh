@@ -24,13 +24,23 @@ ui_print "- Root: $ROOT_IMPL, Android API $API"
 # A module that disabled itself after two bad boots keeps that flag across an
 # upgrade, so installing the build that fixes the problem produced a cheerful
 # "reboot to load the engine" and a module that was still switched off.
-if [ -f /data/adb/modules/rv4a_engine/disable ]; then
-  rm -f /data/adb/modules/rv4a_engine/disable
+if [ -f /data/adb/modules/damondsp_engine/disable ]; then
+  rm -f /data/adb/modules/damondsp_engine/disable
   ui_print "- Cleared a previous self-disable"
-  if [ -f /data/adb/modules/rv4a_engine/boot.log ]; then
-    grep -i "quarantined\|rejected" /data/adb/modules/rv4a_engine/boot.log 2>/dev/null |
+  if [ -f /data/adb/modules/damondsp_engine/boot.log ]; then
+    grep -i "quarantined\|rejected" /data/adb/modules/damondsp_engine/boot.log 2>/dev/null |
       tail -3 | while read -r l; do ui_print "  was: $l"; done
   fi
+fi
+
+# This module used to be installed as rv4a_engine (RootlessViPER4Android). The
+# id changed with the Damon DSP rename, so Magisk sees a second module rather
+# than an upgrade. Both would mount the same libjamesdsp.so and patch the same
+# audio config, so the old one is flagged for removal on the next reboot; the
+# same reboot this install asks for.
+if [ -d /data/adb/modules/rv4a_engine ]; then
+  touch /data/adb/modules/rv4a_engine/remove
+  ui_print "- Found the old rv4a_engine module; it is removed on reboot"
 fi
 
 # The effect is a legacy audio-effect library: the audio server discovers it
@@ -83,44 +93,61 @@ if [ "$HAS_AIDL" = "1" ]; then
   ui_print "  effect does not appear, the AIDL HAL is the one in use."
 fi
 
+# Both word sizes, not just the device's primary one. The process that loads
+# effects is often 32-bit on a 64-bit device: the LG V40's audio HAL is, and
+# loads every effect from /vendor/lib/soundfx. Installing only the arm64 build
+# into lib64 there gave a config naming a library the HAL could never find,
+# logged as "Could not find library in effect directories". Whichever of the
+# two the HAL turns out to be, its copy is there.
 case "$ARCH" in
-  arm64) ABI_DIR="arm64-v8a";   LIBDIR="lib64" ;;
-  arm)   ABI_DIR="armeabi-v7a"; LIBDIR="lib"   ;;
-  x64)   ABI_DIR="x86_64";      LIBDIR="lib64" ;;
-  x86)   ABI_DIR="x86";         LIBDIR="lib"   ;;
+  arm64) ABIS="arm64-v8a:lib64 armeabi-v7a:lib" ;;
+  arm)   ABIS="armeabi-v7a:lib" ;;
+  x64)   ABIS="x86_64:lib64 x86:lib" ;;
+  x86)   ABIS="x86:lib" ;;
   *)     abort "! Unsupported architecture: $ARCH" ;;
 esac
 
-ui_print "- Architecture: $ARCH ($ABI_DIR)"
+ui_print "- Architecture: $ARCH"
 
-SO="$MODPATH/libs/$ABI_DIR/libjamesdsp.so"
-[ -f "$SO" ] || abort "! No engine build for $ABI_DIR in this package"
+# The context is set explicitly, because set_perm hardcodes system_file in
+# Magisk, KernelSU and APatch alike. The /system copy is system_lib_file, the
+# type that describes it; that type does not exist before Android 10, so it is
+# asked for only where it exists. The /vendor copy is vendor_file, the type of
+# every stock library beside it, which the vendor audio HAL is allowed to map.
+label_engine() {
+  case "$1" in
+    */system/vendor/*) set_perm "$1" 0 0 0644 u:object_r:vendor_file:s0 ;;
+    *) [ "$API" -ge 29 ] && set_perm "$1" 0 0 0644 u:object_r:system_lib_file:s0 ;;
+  esac || set_perm "$1" 0 0 0644 || ui_print "! Could not set permissions on $1"
+}
 
-# Install to both system and vendor soundfx: which one the audio server loads
-# from depends on where the device's config lives, and this costs one file.
-#
-# The context is set explicitly. The comment here used to claim set_perm leaves
-# the label to the mount point; it does not, it hardcodes system_file in
-# Magisk, KernelSU and APatch alike. system_file happens to be loadable by the
-# audio server, so this has been working by luck rather than design, and
-# system_lib_file is the type that actually describes the file. It does not
-# exist before Android 10, so ask for it only where it exists and fall back
-# rather than leaving set_perm to fail unnoticed.
-for D in "$MODPATH/system/$LIBDIR/soundfx" "$MODPATH/system/vendor/$LIBDIR/soundfx"; do
-  mkdir -p "$D"
-  cp "$SO" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
-  set_perm "$D" 0 0 0755
-  if [ "$API" -ge 29 ]; then
-    set_perm "$D/libjamesdsp.so" 0 0 0644 u:object_r:system_lib_file:s0 ||
-      set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
-  else
-    set_perm "$D/libjamesdsp.so" 0 0 0644 ||
-      ui_print "! Could not set permissions on $D/libjamesdsp.so"
+installed=""
+for pair in $ABIS; do
+  ABI_DIR=${pair%%:*}
+  LIBDIR=${pair##*:}
+  SO="$MODPATH/libs/$ABI_DIR/libjamesdsp.so"
+  if [ ! -f "$SO" ]; then
+    # Only the primary build is required; a 64-bit device whose audio HAL is
+    # 64-bit as well never touches the other one.
+    [ -z "$installed" ] && abort "! No engine build for $ABI_DIR in this package"
+    ui_print "! No $ABI_DIR engine in this package; a 32-bit audio HAL will not find one"
+    continue
   fi
+  # Install to both system and vendor soundfx: which one the audio server loads
+  # from depends on where the device's config lives, and this costs one file.
+  for D in "$MODPATH/system/$LIBDIR/soundfx" "$MODPATH/system/vendor/$LIBDIR/soundfx"; do
+    mkdir -p "$D"
+    cp "$SO" "$D/libjamesdsp.so" || abort "! Could not stage the engine into $D"
+    case "$D" in
+      */system/vendor/*) set_perm "$D" 0 0 0755 u:object_r:vendor_file:s0 || set_perm "$D" 0 0 0755 ;;
+      *) set_perm "$D" 0 0 0755 ;;
+    esac
+    label_engine "$D/libjamesdsp.so"
+  done
+  installed="$installed $LIBDIR"
 done
 rm -rf "$MODPATH/libs"
-ui_print "- Engine installed to $LIBDIR/soundfx"
+ui_print "- Engine installed to:$installed (soundfx)"
 
 . "$MODPATH/common/patch_audio_config.sh"
 
@@ -136,18 +163,51 @@ else
   patch_audio_config || abort "! Aborting rather than installing something inert"
 fi
 
+# --- the app that drives the engine ---------------------------------------
+# The rooted app ships inside the module, so one flash installs both halves.
+# It can only be installed when flashing from the root manager (BOOTMODE),
+# where the package manager is running; recovery has no pm to call. Either way
+# the copy inside the module directory is removed afterwards: nothing reads it
+# after this point, and the same APK is attached to every GitHub release.
+APK="$MODPATH/DamonDSP-rootful.apk"
+if [ -f "$APK" ]; then
+  if [ "$BOOTMODE" = "true" ] && command -v pm >/dev/null 2>&1; then
+    # system_server cannot read /data/adb, so the APK is staged somewhere it
+    # can. -r replaces an existing install; it is refused when the existing
+    # app was signed with a different key, which is the one-time cost of
+    # moving from a debug-signed build to the release key.
+    TMP_APK=/data/local/tmp/DamonDSP-rootful.apk
+    if cp "$APK" "$TMP_APK" && chmod 644 "$TMP_APK" &&
+       pm install -r --user 0 "$TMP_APK" >"$MODPATH/apk-install.log" 2>&1; then
+      ui_print "- Installed the Damon DSP (Root) app"
+      rm -f "$MODPATH/apk-install.log"
+    else
+      ui_print "! Could not install the Damon DSP (Root) app:"
+      tail -n 3 "$MODPATH/apk-install.log" 2>/dev/null | while read -r l; do ui_print "    $l"; done
+      ui_print "  If it says the signature does not match, uninstall the"
+      ui_print "  old app once, then install the rootful APK from the"
+      ui_print "  release page. The engine is installed regardless."
+    fi
+    rm -f "$TMP_APK"
+  else
+    ui_print "- Flashed from recovery, so the app was not installed:"
+    ui_print "  install the rootful APK from the release page."
+  fi
+  rm -f "$APK"
+fi
+
 ui_print "- Reboot to load the engine"
 ui_print " "
 ui_print "  If the device fails to boot, boot into Safe Mode,"
 ui_print "  which disables every module, or connect it and run:"
 case "$ROOT_IMPL" in
-  KernelSU) ui_print "    adb wait-for-device shell su -c 'ksud module disable rv4a_engine'" ;;
-  APatch)   ui_print "    adb wait-for-device shell su -c 'apd module disable rv4a_engine'" ;;
+  KernelSU) ui_print "    adb wait-for-device shell su -c 'ksud module disable damondsp_engine'" ;;
+  APatch)   ui_print "    adb wait-for-device shell su -c 'apd module disable damondsp_engine'" ;;
   # Not "magisk --remove-modules": that deletes every module on the device,
   # and it is refused from an unprivileged adb shell anyway, so the one line
   # a panicking user would copy used to both fail and, if it worked, take
   # their unrelated modules with it.
-  *)        ui_print "    adb wait-for-device shell su -c 'touch /data/adb/modules/rv4a_engine/disable'" ;;
+  *)        ui_print "    adb wait-for-device shell su -c 'touch /data/adb/modules/damondsp_engine/disable'" ;;
 esac
 ui_print "  (su over adb has to be granted in the manager already.)"
 ui_print " "

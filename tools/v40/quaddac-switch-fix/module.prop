@@ -1,0 +1,6 @@
+id=quaddac_switch_fix
+name=Quad DAC switch fix
+version=v3
+versionCode=3
+author=Damon DSP
+description=LG V40: switching the Quad DAC on can leave the headphones silent, because the ROM's audio HAL keeps the normal headphone path while the DAC chip takes over the jack. This returns the chip to bypass when that happens - what unplugging the headphones does. Remove the module to turn it off.

@@ -1,6 +1,6 @@
-id=rv4a_engine
-name=RootfulViPER4Android engine
-version=v4.0.0
-versionCode=127
-author=alienware377
-description=Installs the RootfulViPER4Android DSP engine as a system-wide audio effect, so root mode runs this fork's own effects rather than the stock JamesDSP set. Adds the vintage tape and vinyl cards, balance, the maximizer, dynamic EQ, stereo imaging, impact, low end, the exciter, four reverb rooms, the ViPER classic limiter, the rebuilt delay, the pitch shifter and the retuned speaker optimisation, on top of everything JamesDSP already provides.
+id=damondsp_engine
+name=Damon DSP engine
+version=v4.1.1
+versionCode=129
+author=arrears
+description=Installs the Damon DSP engine (a RootlessViPER4Android / JamesDSP fork) as a system-wide audio effect, so root mode runs this project's own effects at the mixer's native rate rather than the stock JamesDSP set. Carries the ViPER4Android ports, the vintage tape and vinyl cards, balance, the maximizer, dynamic EQ, stereo imaging, impact, low end, the exciter, four reverb rooms, the ViPER classic limiter, the rebuilt delay and the pitch shifter, and is where the Damon DSP adaptive bass stages land.

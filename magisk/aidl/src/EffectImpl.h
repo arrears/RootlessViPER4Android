@@ -113,8 +113,8 @@ class Rv4aEffect : public BnEffect {
     ndk::ScopedAStatus getDescriptor(Descriptor* desc) override {
         desc->common.id.type = kEffectType;
         desc->common.id.uuid = kEffectUuid;
-        desc->common.name = "RootlessViPER4Android";
-        desc->common.implementor = "alienware377";
+        desc->common.name = "Damon DSP";
+        desc->common.implementor = "arrears";
         desc->common.flags.type = Flags::Type::INSERT;
         desc->common.flags.insert = Flags::Insert::FIRST;
         return ok();

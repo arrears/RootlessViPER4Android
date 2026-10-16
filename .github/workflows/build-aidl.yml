@@ -5,7 +5,7 @@ name: Build AIDL effect service
 # it is still being brought up.
 on:
   push:
-    branches: [ viper-extras ]
+    branches: [ viper-extras, damon-dsp, 'ccr-*' ]
     paths:
       - 'magisk/aidl/**'
       - '.github/workflows/build-aidl.yml'

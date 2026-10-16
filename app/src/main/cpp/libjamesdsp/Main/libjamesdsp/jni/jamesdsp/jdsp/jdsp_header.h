@@ -341,6 +341,63 @@ typedef struct
 	float smooth, fs;
 	int transparent;
 } Balance;
+// ---------------------------------------------------------------------------
+// Damon DSP bass block
+//
+// The brief's hard rule for every bass stage is no bleed into the mids and
+// highs. The block is one linear-phase FIR split at BASSBLOCK_SPLIT_HZ: the
+// stages see only the low band, the dry signal is delayed by exactly the
+// filter's group delay, and what the stages ADD (never the dry signal) is
+// mixed back through a lookahead gain dip, so bass alone cannot drive the
+// master limiter. One block, shared: the sub-harmonic generator lives in it
+// now; the adaptive bass controller and the Dolby-alike bass enhancer join it.
+// ---------------------------------------------------------------------------
+#define BASSBLOCK_SPLIT_HZ 120.0f
+typedef struct
+{
+	float fs;
+	unsigned int blockSize;
+	unsigned int firLen, delay;
+	float *fir;
+	FFTConvolver2x2 conv;
+	// Dry path, delayed by the filter's group delay so the recombine is exact.
+	float *dly[2];
+	unsigned int dlyPos;
+	// Per-block scratch: the low band, and what the stages add to it.
+	float *low[2], *add[2];
+	unsigned int scratchLen;
+	// Lookahead gain dip on the added component only: the delayed dry and
+	// added samples, and a monotonic deque for the sliding-window minimum.
+	unsigned int laLen, laPos;
+	float *laDry[2], *laAdd[2];
+	float *dqVal;
+	unsigned long long *dqIdx;
+	unsigned int dqHead, dqCount, dqCap;
+	unsigned long long sampleIndex;
+	float gain, attackCoef, releaseCoef;
+	int allocated;
+} BassBlock;
+// Double precision on purpose: at 192 kHz a 40 Hz section sits at a
+// normalised frequency of 0.0002, where float coefficients lose the stopband.
+typedef struct { double b0, b1, b2, a1, a2, z1, z2; } SubBiquad;
+typedef struct
+{
+	// Controls
+	float mixDb, sweepHz, wideOct;
+	int dynamic;
+	// Derived from them and the rate
+	float fs, bandLoHz, bandHiHz, mixGain, gate;
+	SubBiquad bpHp[2], bpLp[2], lp[4];
+	// Note tracking: crossings of the detector band, timed to a fraction of a
+	// sample, give the period; the peak of each cycle gives the amplitude.
+	double prevBp, sinceCross, periodSm, minPeriod, maxPeriod;
+	double cyclePeak, cycleAmp, ampSlow, attSlow, relSlow, env, envCoef;
+	int armed, parity, tracking;
+	// The sub itself: a sine at half the tracked frequency.
+	double phase, phaseInc;
+	double level, levelCoef;
+	int transparent;
+} SubHarmonic;
 #define DYNEQ_MAX_BANDS 8
 // freq, Q, threshold dB, ratio, attack ms, release ms, range dB, mode
 #define DYNEQ_VALUES_PER_BAND 8
@@ -971,6 +1028,8 @@ enum JdspEffectId
 	JDSP_EFX_TAPE,
 	JDSP_EFX_VINYL,
 	JDSP_EFX_BALANCE,
+	// Damon DSP: the stages inside the bass block.
+	JDSP_EFX_SUBHARMONIC,
 	JDSP_EFX_COUNT
 };
 typedef struct
@@ -1155,6 +1214,10 @@ typedef struct dspsys
 	Vinyl vinyl;
 	int balanceEnabled;
 	Balance balance;
+	// Damon DSP bass block and the stages inside it
+	int subHarmonicEnabled;
+	SubHarmonic subHarmonic;
+	BassBlock bassBlock;
 	Maximizer maximizer;
 	// Crossfeed
 	int crossfeedEnabled, crossfeedForceRefresh;
@@ -1374,6 +1437,19 @@ extern void BalanceProcess(JamesDSPLib *jdsp, size_t n);
 extern void BalanceEnable(JamesDSPLib *jdsp);
 extern void BalanceDisable(JamesDSPLib *jdsp);
 extern void BalanceRefresh(JamesDSPLib *jdsp);
+// Damon DSP bass block. Acquire/Release/Refresh are called under the lock;
+// Process is dispatched under it too.
+extern int BassBlockAcquire(JamesDSPLib *jdsp);
+extern int BassBlockActive(JamesDSPLib *jdsp);
+extern void BassBlockRelease(JamesDSPLib *jdsp);
+extern void BassBlockRefresh(JamesDSPLib *jdsp);
+extern unsigned int BassBlockLatency(JamesDSPLib *jdsp);
+extern void BassBlockProcess(JamesDSPLib *jdsp, size_t n);
+extern void SubHarmonicSetParam(JamesDSPLib *jdsp, float mixDb, float sweepHz, float wideOct, int dynamic);
+extern void SubHarmonicRender(JamesDSPLib *jdsp, const float *lowL, const float *lowR, float *addL, float *addR, size_t n);
+extern void SubHarmonicEnable(JamesDSPLib *jdsp);
+extern void SubHarmonicDisable(JamesDSPLib *jdsp);
+extern void SubHarmonicRefresh(JamesDSPLib *jdsp);
 extern void MultibandDistSetBands(JamesDSPLib *jdsp, const float *bands, int count);
 extern void MultibandDistSetParam(JamesDSPLib *jdsp,
 	int routing, int model,

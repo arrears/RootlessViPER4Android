@@ -1,8 +1,52 @@
-name: Build fork APK
+# Damon DSP: every run produces the rootless APK, the rootful APK and the
+# Magisk module carrying the shared engine (with the rootful APK inside it),
+# so a build can go straight onto the Redmi Note 10 Pro (flash) or the
+# S24 Ultra (install) from the Actions tab.
+#
+# Every APK is signed with ONE stable release keystore, never the debug key.
+# The rootless app's capture permission (appops PROJECT_MEDIA) is granted once
+# over ADB and survives an update only while the signature stays the same, so
+# a build signed with any other key costs an uninstall and a fresh grant. The
+# keystore lives in four repository secrets:
+#
+#   SIGNING_KEYSTORE    the .jks / .p12 file, base64-encoded on one line
+#   KEY_ALIAS           the key alias inside it
+#   KEYSTORE_PASSWORD   the store password
+#   KEY_PASSWORD        the key password (same as the store password for PKCS12)
+#
+# Without them the run fails before anything is built. A debug-signed artifact
+# must never come out of here: the first one installed decides which key every
+# later update has to match.
+#
+# A push of a v* tag, or a manual run with release_tag set, also publishes a
+# GitHub Release with the module zip and both APKs attached, so there is a
+# stable download link rather than an Actions artifact that expires.
+name: Build Damon DSP
 on:
   push:
-    branches: [ master, viper-extras ]
+    branches: [ master, viper-extras, damon-dsp, 'ccr-*' ]
+    tags: [ 'v*' ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Also publish a GitHub Release under this tag (e.g. v4.1.1). Created on this commit if it does not exist. Leave empty for a plain build."
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # Set on a v* tag push or a manual run that asked for one; empty otherwise.
+  RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+  DAMONDSP_REQUIRE_RELEASE_KEY: "1"
+  DAMONDSP_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+  DAMONDSP_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+  DAMONDSP_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
 jobs:
   build:
@@ -14,37 +58,147 @@ jobs:
           java-version: 17
           distribution: adopt
 
-      - name: Build rootless release APK (FOSS, optimized)
-        run: ./gradlew assembleRootlessFdroidRelease --no-daemon
+      # Fails loudly and first, so a missing secret cannot turn into a
+      # debug-signed build fifteen minutes later.
+      - name: Unpack the release keystore
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE }}
+        run: |
+          set -eu
+          missing=0
+          [ -n "$SIGNING_KEYSTORE_B64" ] || { echo "::error::repository secret SIGNING_KEYSTORE is not set (base64 of the release keystore)"; missing=1; }
+          [ -n "$DAMONDSP_KEY_ALIAS" ] || { echo "::error::repository secret KEY_ALIAS is not set"; missing=1; }
+          [ -n "$DAMONDSP_KEYSTORE_PASSWORD" ] || { echo "::error::repository secret KEYSTORE_PASSWORD is not set"; missing=1; }
+          [ -n "$DAMONDSP_KEY_PASSWORD" ] || { echo "::error::repository secret KEY_PASSWORD is not set"; missing=1; }
+          if [ "$missing" = 1 ]; then
+            echo "::error::Refusing to build: every APK must be signed with the stable release keystore. Add the four secrets under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          KS="$RUNNER_TEMP/damondsp-release.jks"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | tr -d ' \n\r' | base64 -d > "$KS"
+          # The certificate's SHA-256 is what every APK is checked against
+          # below, and what Damon compares between runs.
+          FP=$(keytool -list -v -keystore "$KS" -storepass "$DAMONDSP_KEYSTORE_PASSWORD" -alias "$DAMONDSP_KEY_ALIAS" 2>/dev/null \
+               | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)
+          [ -n "$FP" ] || { echo "::error::the keystore does not open with KEYSTORE_PASSWORD, or KEY_ALIAS is not in it"; exit 1; }
+          echo "DAMONDSP_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+          echo "KEYSTORE_CERT_SHA256=$FP" >> "$GITHUB_ENV"
+          echo "signing certificate SHA-256: $FP"
+
+      - name: Build the rootless and rootful release APKs
+        run: ./gradlew assembleRootlessFdroidRelease assembleRootfulFdroidRelease --no-daemon
+
+      # Not trusted from Gradle's say-so: every APK is verified with apksigner
+      # and its signer compared to the keystore's certificate, so a build that
+      # somehow fell back to another key is rejected here rather than on the
+      # phone, as "App not installed".
+      - name: Verify every APK is signed with the release key
+        run: |
+          set -eu
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          echo "using $BT/apksigner"
+          EXPECTED=$(printf '%s' "$KEYSTORE_CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          fail=0
+          for apk in app/build/outputs/apk/rootlessFdroid/release/*.apk app/build/outputs/apk/rootfulFdroid/release/*.apk; do
+            if ! "$BT/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/verify.txt" 2>&1; then
+              echo "::error::$apk does not verify"; cat "$RUNNER_TEMP/verify.txt"; fail=1; continue
+            fi
+            d=$(grep -i 'certificate SHA-256 digest' "$RUNNER_TEMP/verify.txt" | head -1 | sed 's/.*: *//' | tr -d ': ' | tr 'A-F' 'a-f')
+            [ -n "$d" ] || { echo "::error::no signer digest found for $(basename "$apk")"; cat "$RUNNER_TEMP/verify.txt"; }
+            if [ "$d" != "$EXPECTED" ]; then
+              echo "::error::$(basename "$apk") is signed with a different key: $d (keystore: $EXPECTED)"; fail=1
+            else
+              echo "ok  $(basename "$apk")  signer $d"
+            fi
+          done
+          [ "$fail" = 0 ]
+          {
+            echo "### Signing certificate SHA-256"
+            echo
+            echo '```'
+            echo "$KEYSTORE_CERT_SHA256"
+            echo '```'
+            echo "Every APK in this run carries this signer. It must read the same on every future run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The arm64 builds are what ship: the Redmi Note 10 Pro, the V40 and the
+      # S24 Ultra are all arm64. Exactly one of each must exist.
+      - name: Collect the release files
+        run: |
+          set -eu
+          NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' buildSrc/src/main/kotlin/AndroidConfig.kt | head -1)
+          pick() {
+            set -- "$@"
+            [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected exactly one APK, found: $*"; exit 1; }
+            printf '%s' "$1"
+          }
+          ROOTLESS=$(pick app/build/outputs/apk/rootlessFdroid/release/*arm64-v8a*.apk)
+          ROOTFUL=$(pick app/build/outputs/apk/rootfulFdroid/release/*arm64-v8a*.apk)
+          mkdir -p build/release
+          cp "$ROOTLESS" build/release/
+          cp "$ROOTFUL" build/release/
+          echo "ROOTLESS_APK=build/release/$(basename "$ROOTLESS")" >> "$GITHUB_ENV"
+          echo "ROOTFUL_APK=build/release/$(basename "$ROOTFUL")" >> "$GITHUB_ENV"
+          echo "MODULE_ZIP=build/release/DamonDSP-v$NAME-magisk-module.zip" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$NAME" >> "$GITHUB_ENV"
+          ls -la build/release
 
       - name: Upload rootless APK
         uses: actions/upload-artifact@v4
         with:
-          name: RootlessViPER4Android-release
+          name: DamonDSP-rootless-apk
           path: app/build/outputs/apk/rootlessFdroid/release/*.apk
 
       # Root testers need the rootful APK, which is a different package
-      # (com.alienware377.viper4android.rootful) and installs alongside the
-      # rootless build.
-      - name: Build rootful release APK
-        run: ./gradlew assembleRootfulFdroidRelease --no-daemon
-
+      # (com.arrears.damondsp.rootful) and installs alongside the rootless
+      # build. It is also inside the module below.
       - name: Upload rootful APK
         uses: actions/upload-artifact@v4
         with:
-          name: RootfulViPER4Android-release
+          name: DamonDSP-rootful-apk
           path: app/build/outputs/apk/rootfulFdroid/release/*.apk
 
       # The Magisk module carries this fork's engine as a system-wide effect,
-      # so root mode runs our effects rather than the stock JamesDSP set.
+      # so root mode runs our effects rather than the stock JamesDSP set, and
+      # the signed rootful app so one flash installs both halves.
       - name: Install ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build zip
 
       - name: Build Magisk module
-        run: bash magisk/build-module.sh
+        run: DAMONDSP_ROOTFUL_APK="$ROOTFUL_APK" bash magisk/build-module.sh
+
+      # module.prop version, every library's alignment, relocations and
+      # exported symbols, the scripts' line endings, the zip's paths, and the
+      # bundled app: see ci/check-module.sh.
+      - name: Check the module
+        run: DAMONDSP_EXPECT_APK=1 bash ci/check-module.sh
 
       - name: Upload Magisk module
         uses: actions/upload-artifact@v4
         with:
-          name: RootlessViPER4Android-magisk-module
-          path: build/rv4a-engine-module.zip
+          name: DamonDSP-magisk-module
+          path: build/damondsp-engine-module.zip
+
+      - name: Write the release notes
+        if: env.RELEASE_TAG != ''
+        run: |
+          set -eu
+          cp build/damondsp-engine-module.zip "$MODULE_ZIP"
+          bash ci/release-notes.sh "$RELEASE_TAG" "$KEYSTORE_CERT_SHA256" "$MODULE_ZIP" "$ROOTLESS_APK" "$ROOTFUL_APK" > build/release/RELEASE_NOTES.md
+          cat build/release/RELEASE_NOTES.md
+
+      - name: Publish the GitHub Release
+        if: env.RELEASE_TAG != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Damon DSP ${{ env.RELEASE_TAG }}
+          body_path: build/release/RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            ${{ env.MODULE_ZIP }}
+            ${{ env.ROOTLESS_APK }}
+            ${{ env.ROOTFUL_APK }}

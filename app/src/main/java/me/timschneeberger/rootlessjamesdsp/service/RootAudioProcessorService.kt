@@ -50,7 +50,10 @@ class RootAudioProcessorService : BaseAudioProcessorService(), KoinComponent,
     private val audioPlaybackCallback = object : AudioManager.AudioPlaybackCallback() {
         override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
             app.rootSessionDatabase.sessionList.values.forEach { session ->
-                (session as? RemoteEffectSession)?.effect?.reloadConvolverIfSampleRateChanged()
+                (session as? RemoteEffectSession)?.effect?.run {
+                    ensureAlive()
+                    reloadConvolverIfSampleRateChanged()
+                }
             }
         }
     }

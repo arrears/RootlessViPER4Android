@@ -21,7 +21,7 @@
 
 #include <android/log.h>
 
-#define LOG_TAG "RV4A-HAL"
+#define LOG_TAG "DamonDSP-HAL"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -52,8 +52,8 @@ static effect_descriptor_t rv4a_descriptor =
        said nothing about which engine or which version, which is why a device
        running the stock module showed every fork card and responded to none
        of them: unhandled ids are dropped without a word at both ends. */
-    "RootlessViPER4Android engine v4",
-    "alienware377"
+    "Damon DSP engine v4",
+    "arrears"
 };
 
 struct rv4a_context
@@ -88,6 +88,8 @@ struct rv4a_context
        these with an empty engine ranges from silent to a crash in the audio
        server, so the enable is refused until its payload has arrived. */
     bool haveIr, haveGraphicEq, haveDdc, haveLiveprog;
+    /* The same for Liveprog slots 1-3; index 0 is unused (slot 0 is above). */
+    bool haveLiveprogSlot[4];
 
     /* Only used when the server asks us to add to its buffer rather than
        overwrite it. Per context, never shared: a buffer shared between effects
@@ -347,9 +349,15 @@ static bool handleBufferedPayload(rv4a_context *c, int32_t id,
             }
             else
             {
+                /* 1 is success here, not 0: the parser hands back the loader's
+                   own result, and the loader returns 1 once both sections have
+                   compiled. 0 means "no @init section", the negatives are
+                   compile failures. Reading 0 as success left every script
+                   that compiled marked as missing, so the enable below was
+                   refused and Liveprog could never be switched on. */
                 const int rc = LiveProgStringParser(&c->dsp, c->stringBuf);
-                c->haveLiveprog = rc == 0;
-                if (rc != 0) LOGE("liveprog rejected the script (%d)", rc);
+                c->haveLiveprog = rc == 1;
+                if (rc != 1) LOGE("liveprog rejected the script (%d)", rc);
             }
             free(c->stringBuf);
             c->stringBuf = nullptr;
@@ -357,6 +365,28 @@ static bool handleBufferedPayload(rv4a_context *c, int32_t id,
         }
         c->stringIndex = 0;
         return true;
+
+    case 10021:     /* commit: liveprog slots 1-3 */
+    case 10022:
+    case 10023:
+    {
+        const int slot = id - 10020;
+        if (c->stringBuf)
+        {
+            c->stringBuf[c->stringCapacity] = '\0';
+            /* A slot is switched off before its script is replaced, by the
+               app; this keeps it off if the new one does not compile. */
+            LiveProgDisableSlot(&c->dsp, slot);
+            const int rc = LiveProgStringParserSlot(&c->dsp, slot, c->stringBuf);
+            c->haveLiveprogSlot[slot] = rc == 1;
+            if (rc != 1) LOGE("liveprog slot %d rejected the script (%d)", slot, rc);
+            free(c->stringBuf);
+            c->stringBuf = nullptr;
+            c->stringCapacity = 0;
+        }
+        c->stringIndex = 0;
+        return true;
+    }
 
     default:
         return false;
@@ -410,32 +440,39 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
             return -EINVAL;
         }
 
-        c->sampleRate = cfg->inputCfg.samplingRate;
+        const uint32_t newRate = cfg->inputCfg.samplingRate;
         c->channels = 2;
         c->outAccessMode = cfg->outputCfg.accessMode;
 
-        /* This arrives again on every route change, and used to re-initialise
-           an engine that still held everything from last time: every filter,
-           convolver and resampler was leaked, once per headphone plug. Free it
-           first, and zero the struct because Init expects the cleared state
-           EffectCreate's calloc gave it.
-
-           The payload flags have to go with it. They say a subsystem has
-           something loaded behind it, that memory has just been freed, and the
-           whole reason they exist is that enabling one of these with an empty
-           engine "ranges from silent to a crash in the audio server". Leaving
-           them set is the exact condition they were written to prevent. */
+        /* An engine that is already running keeps everything it was given.
+           The server sends SET_CONFIG again whenever it re-plumbs the chain -
+           a new player session gets one straight after the first, differing
+           only in access mode - and rebuilding from scratch here reset every
+           effect to its defaults while the app believed its settings were in
+           place. Which cards "worked" then came down to whether they were
+           touched before or after that second call. A changed rate is applied
+           the way the app's own engine applies one, keeping the settings. */
         if (c->configured)
         {
-            JamesDSPFree(&c->dsp);
-            memset(&c->dsp, 0, sizeof(c->dsp));
-            c->haveIr = c->haveGraphicEq = c->haveDdc = c->haveLiveprog = false;
-            c->irPartsSeen = c->irParts = c->irChannels = c->irFrames = 0;
-            c->stringIndex = 0;
-            memset(c->hashSlot, 0, sizeof(c->hashSlot));
-            LOGI("SET_CONFIG: previous engine released before re-initialising");
+            if (newRate != c->sampleRate)
+            {
+                JamesDSPSetSampleRate(&c->dsp, (float)newRate, 0);
+                LOGI("SET_CONFIG: rate %u -> %u, settings kept", c->sampleRate, newRate);
+                c->sampleRate = newRate;
+            }
+            else
+                LOGI("SET_CONFIG: same rate, engine and settings kept");
+            if (pReplyData && replySize && *replySize == sizeof(int))
+                *(int *)pReplyData = 0;
+            return 0;
         }
+        c->sampleRate = newRate;
 
+        /* First configuration only: the engine is initialised exactly once per
+           effect, on the cleared state EffectCreate's calloc gave it, and
+           freed in EffectRelease. Re-initialising it here on later calls is
+           what used to leak every filter once per headphone plug, and what
+           then, freed properly, wiped the user's settings instead. */
         JamesDSPInit(&c->dsp, RV4A_BLOCK, c->sampleRate);
         if (!JamesDSPGetMutexStatus(&c->dsp))
             LOGW("SET_CONFIG: engine reports no mutex; concurrent access unsafe");
@@ -551,7 +588,8 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
            enables these from saved preferences on every sync, which can easily
            run before - or without - the payload ever arriving. */
         if ((id == 1205 && !c->haveIr) || (id == 1210 && !c->haveGraphicEq) ||
-            (id == 1212 && !c->haveDdc) || (id == 1213 && !c->haveLiveprog))
+            (id == 1212 && !c->haveDdc) || (id == 1213 && !c->haveLiveprog) ||
+            (id >= 26201 && id <= 26203 && !c->haveLiveprogSlot[id - 26200]))
         {
             if (on)
             {
@@ -568,8 +606,13 @@ static int32_t rv4a_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmd
            than passing them to the engine keeps that round trip honest. */
         if (id >= 25000 && id <= 25003)
         {
+            /* Kept only for a payload that actually loaded. The app sends the
+               checksum right after the payload whatever became of it, so a
+               script that failed to compile used to be recorded as present,
+               and the app then skipped sending it again on every later sync. */
+            const bool loaded[] = { c->haveGraphicEq, c->haveDdc, c->haveLiveprog, c->haveIr };
             if (p->vsize >= sizeof(int32_t))
-                c->hashSlot[id - 25000] = *(const int32_t *)val;
+                c->hashSlot[id - 25000] = loaded[id - 25000] ? *(const int32_t *)val : 0;
             if (pReplyData && replySize && *replySize == sizeof(int))
                 *(int *)pReplyData = 0;
             return 0;
@@ -731,8 +774,8 @@ HAL_EXPORT audio_effect_library_t AUDIO_EFFECT_LIBRARY_INFO_SYM =
 {
     .tag = AUDIO_EFFECT_LIBRARY_TAG,
     .version = EFFECT_LIBRARY_API_VERSION,
-    .name = "RootlessViPER4Android Effect Library",
-    .implementor = "alienware377",
+    .name = "Damon DSP Effect Library",
+    .implementor = "arrears",
     .create_effect = EffectCreate,
     .release_effect = EffectRelease,
     .get_descriptor = EffectGetDescriptor,

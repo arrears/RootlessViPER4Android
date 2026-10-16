@@ -71,7 +71,6 @@
     <string name="key_credits_version" translatable="false">credits_version</string>
     <string name="key_credits_build_info" translatable="false">credits_build_info</string>
     <string name="key_credits_check_update" translatable="false">credits_check_update</string>
-    <string name="key_credits_google_play" translatable="false">credits_google_play</string>
     <string name="key_audioformat_enhanced_processing_info" translatable="false">audioformat_enhanced_processing_info</string>
     <string name="key_audioformat_optimization_refresh" translatable="false">audioformat_optimization_refresh</string>
     <string name="key_device_profiles_info" translatable="false">device_profiles_info</string>
@@ -335,6 +334,11 @@
     <string name="key_vinyl_wear" translatable="false">vinyl_wear</string>
     <string name="key_vinyl_follow" translatable="false">vinyl_follow</string>
     <string name="key_vinyl_mix" translatable="false">vinyl_mix</string>
+    <string name="key_subharmonic_enable" translatable="false">subharmonic_enable</string>
+    <string name="key_subharmonic_mix" translatable="false">subharmonic_mix</string>
+    <string name="key_subharmonic_sweep" translatable="false">subharmonic_sweep</string>
+    <string name="key_subharmonic_wide" translatable="false">subharmonic_wide</string>
+    <string name="key_subharmonic_dynamic" translatable="false">subharmonic_dynamic</string>
     <string name="key_balance_enable" translatable="false">balance_enable</string>
     <string name="key_balance_balance" translatable="false">balance_balance</string>
     <string name="key_balance_swap" translatable="false">balance_swap</string>

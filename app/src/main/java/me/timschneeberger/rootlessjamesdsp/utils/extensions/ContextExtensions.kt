@@ -169,7 +169,13 @@ object ContextExtensions {
 
     // Very simple & naive app cloner checks; please don't use multiple instances at once
     private val PKGNAME_REFS = setOf(
-        // This fork's own identifiers, from v3.35.0 onwards.
+        // Damon DSP's own identifiers, from v4.1.0 onwards.
+        "Y29tLmFycmVhcnMuZGFtb25kc3Aucm9vdGxlc3M=",
+        "Y29tLmFycmVhcnMuZGFtb25kc3Aucm9vdGxlc3MuZGVidWc=",
+        "Y29tLmFycmVhcnMuZGFtb25kc3Aucm9vdGZ1bA==",
+        "Y29tLmFycmVhcnMuZGFtb25kc3Aucm9vdGZ1bC5kZWJ1Zw==",
+        // RootlessViPER4Android's identifiers (v3.35.0 to v4.0.0), the fork
+        // this project was built from.
         "Y29tLmFsaWVud2FyZTM3Ny52aXBlcjRhbmRyb2lkLnJvb3RsZXNz",
         "Y29tLmFsaWVud2FyZTM3Ny52aXBlcjRhbmRyb2lkLnJvb3RsZXNzLmRlYnVn",
         "Y29tLmFsaWVud2FyZTM3Ny52aXBlcjRhbmRyb2lkLnJvb3RmdWw=",
@@ -181,7 +187,8 @@ object ContextExtensions {
         "bWUudGltc2NobmVlYmVyZ2VyLnJvb3RsZXNzamFtZXNkc3AuZGVidWc=",
         "amFtZXMuZHNw", "amFtZXMuZHNwLmRlYnVn", "bWUudGltc2NobmVlYmVyZ2VyLnJvb3RsZXNzamFtZXNkc3AudjRh",
         "amFtZXMuZHNwLnY0YQ==")
-    private val APPNAME_REFS = setOf("Um9vdGxlc3NKYW1lc0RTUA==", "SmFtZXNEU1A=",
+    private val APPNAME_REFS = setOf("RGFtb24gRFNQ", "RGFtb24gRFNQIChSb290KQ==",
+        "Um9vdGxlc3NKYW1lc0RTUA==", "SmFtZXNEU1A=",
         "Um9vdGxlc3NWaVBFUjRBbmRyb2lk", "Um9vdGZ1bFZpUEVSNEFuZHJvaWQ=")
     fun Context.check(): Int {
         val appName = getAppName()

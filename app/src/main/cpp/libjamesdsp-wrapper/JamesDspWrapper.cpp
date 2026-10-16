@@ -640,6 +640,16 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setExciter(JNIE
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setSubHarmonic(JNIEnv *env, jobject obj, jlong self,
+        jboolean enable, jfloat mixDb, jfloat sweepHz, jfloat wideOct, jboolean dynamic)
+{
+    DECLARE_DSP_B
+    SubHarmonicSetParam(dsp, mixDb, sweepHz, wideOct, dynamic ? 1 : 0);
+    if (enable) SubHarmonicEnable(dsp); else SubHarmonicDisable(dsp);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setLowEnd(JNIEnv *env, jobject obj, jlong self,
         jboolean enable, jfloat subsonic, jfloat weightHz, jfloat weightDb,
         jfloat mudHz, jfloat mudDb, jfloat mix)
@@ -1093,7 +1103,8 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setLiveprog(JNI
     // Workaround due to library bug
     jdsp_unlock(dsp);
 
-    const char* errorString = NSEEL_code_getcodeerror(dsp->eel.vm);
+    // The script engine is only made once a script is loaded, so it may not exist.
+    const char* errorString = dsp->eel.vm ? NSEEL_code_getcodeerror(dsp->eel.vm) : nullptr;
     if(errorString != nullptr)
     {
         LOGW("JamesDspWrapper::setLiveprog: NSEEL_code_getcodeerror: Syntax error in script file, cannot load. Reason: %s", errorString);
@@ -1124,6 +1135,8 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_enumerateEelVar
     DECLARE_DSP(array.getJavaReference())
 
     auto *ctx = (compileContext*)dsp->eel.vm;
+    if (!ctx)
+        return array.getJavaReference();
     for (int i = 0; i < ctx->varTable_numBlocks; i++)
     {
         for (int j = 0; j < NSEEL_VARS_PER_BLOCK; j++)
@@ -1157,6 +1170,8 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_manipulateEelVa
 {
     DECLARE_DSP_B
     auto* ctx = (compileContext*)dsp->eel.vm;
+    if (!ctx)
+        return false;
     for (int i = 0; i < ctx->varTable_numBlocks; i++)
     {
         for (int j = 0; j < NSEEL_VARS_PER_BLOCK; j++)

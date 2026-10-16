@@ -1,4 +1,4 @@
-# RootlessViPER4Android engine (Magisk module)
+# Damon DSP engine (Magisk module)
 
 Installs this fork's DSP engine as a **system-wide audio effect**.
 
@@ -19,7 +19,7 @@ descriptor the app looks up, so no app-side change is needed.
 ## Building
 
 Run `magisk/build-module.sh` from the repository root: it builds every ABI and
-writes `build/rv4a-engine-module.zip`.
+writes `build/damondsp-engine-module.zip`.
 
 If you package by hand, zip with forward-slash separators. Windows'
 `Compress-Archive` writes backslashes, and a module zipped that way extracts as
@@ -29,16 +29,22 @@ installs without error and does nothing.
 ### Manual
 
 ```
-./gradlew :app:externalNativeBuildRootFdroidRelease   # or build the target directly
+cmake -S app/src/main/cpp -B <build-dir> -DDAMONDSP_BUILD_HAL=ON \
+      -DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake -DANDROID_ABI=<abi>
 cmake --build <build-dir> --target jamesdsp_hal
 ```
 
-The target emits `libjamesdsp_hal.so` (it cannot be called `libjamesdsp.so` in
-the build tree without colliding with the APK's own library of that name).
-Copy it to `magisk/libs/<abi>/libjamesdsp.so` — renaming as you go, since that
-is the filename the audio server expects — then zip the `magisk/` directory.
+The `jamesdsp_hal` target only exists with `-DDAMONDSP_BUILD_HAL=ON`, so the
+APK build never sees it. It emits `<build-dir>/hal/libjamesdsp.so`. Copy that
+to `magisk/libs/<abi>/libjamesdsp.so`, then zip the `magisk/` directory.
 
 ## Installing
+
+The module also carries the rooted app (`DamonDSP-rootful.apk`, arm64,
+signed with the release key). Flashed from the Magisk app it installs the app
+too; flashed from recovery there is no package manager to call, so install the
+rootful APK from the release page by hand. The copy inside the module is
+removed after the attempt either way.
 
 Flash in Magisk, then reboot. The installer copies the library into
 `/system/lib*/soundfx/` and registers it in whichever audio effects config the
@@ -86,8 +92,8 @@ like a bootloop. Recovery, easiest first:
 2. **Safe Mode** — hold the key combo your device uses at boot. Magisk detects
    Safe Mode and disables all modules; the state persists after a normal
    reboot, so you can then remove this one from the Magisk app.
-3. **Recovery** — delete `/data/adb/modules/rv4a_engine` from a file manager in
-   TWRP, or `rm -rf /data/adb/modules/rv4a_engine` from its shell.
+3. **Recovery** — delete `/data/adb/modules/damondsp_engine` from a file manager in
+   TWRP, or `rm -rf /data/adb/modules/damondsp_engine` from its shell.
 
 The module also defends itself: `post-fs-data.sh` runs before the audio server
 starts and moves aside any audio config of ours that fails validation, so the

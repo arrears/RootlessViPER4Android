@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_subharmonic_enable"
+        android:disableDependentsState="false"
+        android:title="@string/subharmonic_enable"
+        android:icon="@drawable/ic_twotone_speaker_24dp"
+        app:iconSpaceReserved="false">
+        <Preference android:key="section_info" android:title="@string/section_info_title"
+            android:summary="@string/subharmonic_info" android:persistent="false"
+            app:allowDividerAbove="false" app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_subharmonic_mix"
+            android:title="@string/subharmonic_mix"
+            android:summary="@string/subharmonic_mix_summary"
+            android:defaultValue="-12"
+            app:minValue="-40" app:maxValue="0" app:unit="dB" app:precision="0"
+            app:allowDividerAbove="false" app:updatesContinuously="true"
+            app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_subharmonic_sweep"
+            android:title="@string/subharmonic_sweep"
+            android:summary="@string/subharmonic_sweep_summary"
+            android:defaultValue="77"
+            app:minValue="30" app:maxValue="160" app:unit="Hz" app:precision="0"
+            app:allowDividerAbove="false" app:updatesContinuously="true"
+            app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_subharmonic_wide"
+            android:title="@string/subharmonic_wide"
+            android:summary="@string/subharmonic_wide_summary"
+            android:defaultValue="1.25"
+            app:minValue="0.5" app:maxValue="3" app:unit="oct" app:precision="2"
+            app:allowDividerAbove="false" app:updatesContinuously="true"
+            app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSwitchPreference
+            android:key="@string/key_subharmonic_dynamic"
+            android:title="@string/subharmonic_dynamic"
+            android:summary="@string/subharmonic_dynamic_summary"
+            android:defaultValue="true"
+            app:allowDividerAbove="false" app:iconSpaceReserved="false"/>
+    </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>
