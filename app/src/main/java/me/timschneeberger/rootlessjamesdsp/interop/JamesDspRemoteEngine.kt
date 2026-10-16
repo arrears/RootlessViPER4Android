@@ -40,7 +40,7 @@ class JamesDspRemoteEngine(
                 Constants.ACTION_SAMPLE_RATE_UPDATED -> syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
                 Constants.ACTION_PREFERENCES_UPDATED -> syncWithPreferences()
                 Constants.ACTION_SERVICE_RELOAD_LIVEPROG -> syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG, Constants.PREF_LIVEPROG2, Constants.PREF_LIVEPROG3, Constants.PREF_LIVEPROG4))
-                Constants.ACTION_SERVICE_HARD_REBOOT_CORE -> rebootEngine()
+                Constants.ACTION_SERVICE_HARD_REBOOT_CORE -> { rebootEngine(); syncWithPreferences() }
                 Constants.ACTION_SERVICE_SOFT_REBOOT_CORE -> { clearCache(); syncWithPreferences() }
             }
         }
@@ -48,8 +48,11 @@ class JamesDspRemoteEngine(
 
     var effect: AudioEffectHidden? = createEffect()
 
+    /** What the user asked for, kept so a replacement effect can be put back the same way. */
+    private var wantEnabled = false
+
     override var enabled: Boolean
-        set(value) { effect?.enabled = value }
+        set(value) { wantEnabled = value; effect?.enabled = value }
         get() = effect?.enabled ?: false
 
     override var sampleRate: Float
@@ -81,20 +84,31 @@ class JamesDspRemoteEngine(
         }
     }
 
-    private fun checkEngine() {
+    /** @return true if the effect had died and was replaced */
+    private fun checkEngine(): Boolean {
         if (!isPidValid) {
             Timber.e("PID ($pid) for session $sessionId invalid. Engine probably crashed or detached.")
-            context.toast("Engine crashed. Rebooting JamesDSP.", false)
+            context.toast("Audio engine restarted; reattaching Damon DSP.", false)
             rebootEngine()
+            return true
         }
 
         if (isSampleRateAbnormal) {
             Timber.e("PID ($pid) for session $sessionId invalid. Engine crashed.")
             context.toast("Abnormal sampling rate. Rebooting JamesDSP.", false)
             rebootEngine()
+            return true
         }
+        return false
     }
 
+    /**
+     * Replaces a dead effect with a working one. The replacement used to come
+     * back switched off - a new AudioEffect always starts disabled - and empty:
+     * the preference cache still listed every setting as sent, so the next sync
+     * pushed only what had changed since. The engine looked reattached and did
+     * nothing until the user happened to touch every card.
+     */
     private fun rebootEngine() {
         try {
             effect?.release()
@@ -106,6 +120,21 @@ class JamesDspRemoteEngine(
             effect = null
             return
         }
+        effect?.enabled = wantEnabled
+        clearCache()
+    }
+
+    /**
+     * Checked on every playback change rather than only when a setting changes.
+     * When the audio server restarts every effect it held dies with it, while
+     * the players reconnect under the same session ids - so nothing else would
+     * notice, and processing stayed off until the next pause and play.
+     */
+    fun ensureAlive() {
+        if (effect == null)
+            return
+        if (checkEngine())
+            syncWithPreferences()
     }
 
     override fun syncWithPreferences(forceUpdateNamespaces: Array<String>?) {

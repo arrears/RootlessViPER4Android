@@ -529,8 +529,11 @@ void eqconPrecompute(unsigned int L, char *C, constraintsSparseMtx *sparseMtx)
 						sparseMtx->correspondingValueQ[constraintMatSize * ii + i * mOpt + n1] = 3;
 					else if (U0l[j * Lh + i] == 2)
 						sparseMtx->correspondingValueQ[constraintMatSize * ii + i * mOpt + n1] = 4;
-					else
-						printf("Shit 1!\n");
+					/* Anything outside -2..2 keeps the memset index 0, i.e. it is
+					   weighted as -2. That is upstream's behaviour and the stereo
+					   enhancement filterbank is designed with it, so it stays; it
+					   used to print a line to stdout for every such entry, dozens
+					   per engine start. */
 					n1++;
 				}
 				if (sabs8(QQ[j * Lh + i]) > 0)
@@ -546,8 +549,7 @@ void eqconPrecompute(unsigned int L, char *C, constraintsSparseMtx *sparseMtx)
 						sparseMtx->correspondingValueQQ[constraintMatSize * ii + i * mOpt + n2] = 3;
 					else if (QQ[j * Lh + i] == 2)
 						sparseMtx->correspondingValueQQ[constraintMatSize * ii + i * mOpt + n2] = 4;
-					else
-						printf("Shit 2!\n");
+					/* As above: out-of-range entries stay at index 0 (-2). */
 					n2++;
 				}
 			}
