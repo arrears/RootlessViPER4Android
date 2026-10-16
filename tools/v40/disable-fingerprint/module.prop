@@ -1,0 +1,6 @@
+id=disable_fingerprint
+name=Disable fingerprint sensor
+version=v1
+versionCode=1
+author=Damon DSP
+description=Hides the fingerprint feature from Android and stops the fingerprint HAL, for a device whose sensor is disconnected. Remove the module to restore it.

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Replaces android.hardware.fingerprint.xml: the sensor is disconnected. -->
+<permissions>
+</permissions>
