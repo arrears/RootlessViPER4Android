@@ -711,10 +711,23 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         else emptyList()
         if (allowed.isNotEmpty()) {
             allowed.forEach { configBuilder.addMatchingUid(it) }
-            sessionManager.sessionDatabase.setAllowedUids(allowed.toTypedArray())
-            sessionManager.sessionDatabase.setExcludedUids(arrayOf())
+
+            // Apps that block capture (Spotify, for one) can be on the list,
+            // but Android will never hand us their audio. Muting them anyway
+            // just silences them, so leave them alone and let them play
+            // unprocessed, as the ordinary path does. They stay in the capture
+            // match: it gets nothing from them, and dropping them could leave
+            // the match empty, which Android reads as "capture everything".
+            val restricted = if (excludeRestrictedSessions)
+                sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet()
+            else emptySet()
+            val muted = allowed.filter { it !in restricted }
+
+            sessionManager.sessionDatabase.setAllowedUids(muted.toTypedArray())
+            sessionManager.sessionDatabase.setExcludedUids(restricted.toTypedArray())
             sessionManager.pollOnce(false)
-            Timber.d("buildAudioRecord: Allowed UIDs only: ${allowed.joinToString("; ")}")
+            Timber.d("buildAudioRecord: Allowed UIDs only: ${allowed.joinToString("; ")}; " +
+                    "left unmuted as restricted: ${allowed.filter { it in restricted }.joinToString("; ")}")
         }
         else {
             val excluded = (if(excludeRestrictedSessions)
