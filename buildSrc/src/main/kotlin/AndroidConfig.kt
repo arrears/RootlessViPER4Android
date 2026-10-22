@@ -1,12 +1,12 @@
-﻿object AndroidConfig {
+object AndroidConfig {
     var minSdk = 29
 
     const val compileSdk = 35
     const val targetSdk = 34
 
     // Version of this fork (Damon DSP, forked from RootlessViPER4Android)
-    const val versionName = "4.1.1"
-    const val versionCode = 129
+    const val versionName = "4.1.2"
+    const val versionCode = 130
 
     // Upstream RootlessJamesDSP release this fork is based on
     const val upstreamVersionName = "1.6.14"

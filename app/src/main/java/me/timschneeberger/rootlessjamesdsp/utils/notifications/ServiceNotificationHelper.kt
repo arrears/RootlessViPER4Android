@@ -19,6 +19,7 @@ import me.timschneeberger.rootlessjamesdsp.activity.EngineLauncherActivity
 import me.timschneeberger.rootlessjamesdsp.activity.MainActivity
 import me.timschneeberger.rootlessjamesdsp.model.IEffectSession
 import me.timschneeberger.rootlessjamesdsp.service.RootlessAudioProcessorService
+import me.timschneeberger.rootlessjamesdsp.utils.RoutingObserver
 import me.timschneeberger.rootlessjamesdsp.utils.SdkCheck
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.getAppName
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.getAppNameFromUid
@@ -30,6 +31,7 @@ import org.koin.core.component.inject
 
 object ServiceNotificationHelper: KoinComponent {
     private val preferences: Preferences.App by inject()
+    private val routingObserver: RoutingObserver by inject()
 
     fun pushPermissionPromptNotification(context: Context) {
         NotificationCompat.Builder(context, Notifications.CHANNEL_SERVICE_STARTUP)
@@ -100,15 +102,18 @@ object ServiceNotificationHelper: KoinComponent {
             ), when {
                 sessions.isNotEmpty() -> context.getString(R.string.notification_processing, apps)
                 else -> context.getString(R.string.notification_idle)
-            })
+            },
+            routingObserver.currentDevice?.name)
     }
 
     private fun createServiceNotification(
         context: Context,
         title: String,
-        message: String
+        message: String,
+        outputDevice: String? = null
     ) = NotificationCompat.Builder(context, Notifications.CHANNEL_SERVICE_STATUS)
         .setShowWhen(false)
+        .setSubText(outputDevice)
         .setOnlyAlertOnce(true)
         .setCategory(Notification.CATEGORY_SERVICE)
         .setContentTitle(title)

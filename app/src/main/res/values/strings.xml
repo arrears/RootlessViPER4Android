@@ -1287,4 +1287,5 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="maxr_oversample_2x">2x</string>
     <string name="maxr_oversample_4x">4x</string>
     <string name="rootless_app_uncapturable">%1$s can’t be processed without root: its audio can’t be captured. It will play unprocessed.</string>
+    <string name="rootless_allowlist_uncapturable">None of the apps in Included apps can be captured, so Damon DSP is processing all apps instead. Add the apps you want processed to the list.</string>
 </resources>

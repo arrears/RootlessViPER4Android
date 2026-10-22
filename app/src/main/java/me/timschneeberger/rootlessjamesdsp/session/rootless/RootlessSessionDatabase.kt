@@ -41,6 +41,10 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
     )
     private val warnedUncapturable = mutableSetOf<String>()
 
+    /** Whether the app behind [uid] is one whose audio we can never capture. */
+    fun isUncapturableUid(uid: Int): Boolean =
+        context.packageManager.getPackagesForUid(uid)?.any { it in uncapturablePackages } == true
+
     override fun shouldAcceptSessionDump(id: Int, session: AudioSessionDumpEntry): Boolean {
         if (!session.isUsageRecordable()) {
             Timber.d("Skipped session $id due to usage ($session)")

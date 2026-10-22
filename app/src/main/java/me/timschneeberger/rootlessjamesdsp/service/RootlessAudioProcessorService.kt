@@ -10,10 +10,13 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.AudioRouting
 import android.media.AudioTrack
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -21,6 +24,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
@@ -44,6 +48,7 @@ import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionDatab
 import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionManager
 import me.timschneeberger.rootlessjamesdsp.session.rootless.SessionRecordingPolicyManager
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.utils.RoutingObserver
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_PREFERENCES_UPDATED
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_SERVICE_HARD_REBOOT_CORE
@@ -105,6 +110,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     // Whether the app list names what to process rather than what to skip
     private var allowlistMode = false
+    private var warnedEmptyAllowlist = false
+
+    // Output routing
+    private val routingObserver: RoutingObserver by inject()
+    @Volatile
+    private var currentTrack: AudioTrack? = null
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     // Termination flags
     private var isProcessorDisposing = false
@@ -161,6 +173,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // Setup database observer
         blockedApps.observeForever(blockedAppObserver)
+
+        // Follow output changes
+        routingObserver.registerOnRoutingChangeListener(routingListener)
+        audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
 
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
 
@@ -260,6 +276,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // Unregister database observer
         blockedApps.removeObserver(blockedAppObserver)
 
+        // Unregister routing listeners
+        try {
+            routingObserver.unregisterOnRoutingChangeListener(routingListener)
+            audioManager.unregisterAudioDeviceCallback(deviceCallback)
+        }
+        catch (ex: Exception) { Timber.e(ex, "Failed to unregister routing listeners") }
+        mainHandler.removeCallbacksAndMessages(null)
+
         // Unregister receivers and release resources
         unregisterLocalReceiver(broadcastReceiver)
 
@@ -314,6 +338,40 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
             }
+        }
+    }
+
+    // Output device changes: keep the notification naming where audio goes
+    private val routingListener = object : RoutingObserver.RoutingChangedCallback {
+        override fun onRoutingDeviceChanged(device: RoutingObserver.Device?) {
+            Timber.d("Output device changed: $device")
+            if (!isServiceDisposing)
+                ServiceNotificationHelper.pushServiceNotification(this@RootlessAudioProcessorService, notificationSessions)
+        }
+    }
+
+    // Our output track normally follows the system's default output by itself.
+    // If the device it is playing on disappears (Bluetooth drops, a watch that
+    // briefly took the link goes away) and the track does not move on its own,
+    // it would keep writing into nothing. Rebuild the pipeline in that case so
+    // it opens on whatever the current output is.
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+            val routedId = try { currentTrack?.routedDevice?.id } catch (ex: Exception) { null }
+            Timber.d("Output devices removed: ${removedDevices?.joinToString { "${it.productName} (${it.type})" }}; track routed to $routedId")
+            if (routedId != null && removedDevices?.any { it.id == routedId } == true) {
+                Timber.w("The device our output track was playing on is gone; rebuilding the pipeline")
+                // Give the audio policy a moment to settle on the new output
+                mainHandler.postDelayed({
+                    if (!isServiceDisposing && !isProcessorDisposing)
+                        restartRecording()
+                }, 300)
+            }
+            routingObserver.refresh()
+        }
+
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+            routingObserver.refresh()
         }
     }
 
@@ -491,6 +549,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             engine.sampleRate = sampleRate.toFloat()
         }
 
+        currentTrack = track
+        track.addOnRoutingChangedListener(AudioRouting.OnRoutingChangedListener { routing ->
+            Timber.i("Output track routed to ${routing.routedDevice?.productName} (type ${routing.routedDevice?.type})")
+            routingObserver.refresh()
+        }, mainHandler)
+
         // TODO Move all audio-related code to C++
         recorderThread = Thread {
             try {
@@ -512,6 +576,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // and output track are skipped; capture keeps running so the
                 // first non-silent buffer resumes instantly and loses nothing.
                 var bufferGated = false
+                var lastIdleRepoll = 0L
                 val bufferSecs = (bufferSize / 2.0) / sampleRate.toDouble()
                 while (!isProcessorDisposing) {
                     if(recreateRecorderRequested) {
@@ -533,6 +598,22 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         // Recreate recorder with new AudioPlaybackRecordingConfiguration
                         recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
                         Timber.d("Recorder recreated")
+                    }
+
+                    // Idle only means no session was found to take over. If
+                    // something is playing anyway, a session was missed, and
+                    // without another look nothing would ever pick it up: the
+                    // app plays unprocessed while we wait. While suspended our
+                    // own track is stopped, so "music active" is someone else.
+                    if(isProcessorIdle) {
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastIdleRepoll >= IDLE_REPOLL_MS) {
+                            lastIdleRepoll = now
+                            if (!suspendOnIdle || audioManager.isMusicActive) {
+                                Timber.d("Idle while playback may be active; looking for sessions again")
+                                sessionManager.pollOnce(false)
+                            }
+                        }
                     }
 
                     // Suspend core while idle
@@ -609,6 +690,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     track.stop()
                 }
 
+                if (currentTrack === track)
+                    currentTrack = null
                 recorder.release()
                 track.release()
             }
@@ -706,28 +789,42 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // Our own uid is dropped rather than trusted not to be on the list.
         // In the ordinary path it is excluded explicitly; here there is no
         // exclusion to hide behind, and capturing ourselves is a loop.
-        val allowed = if (allowlistMode)
+        val listed = if (allowlistMode)
             blockedApps.value?.map { it.uid }.orEmpty().filter { it != Process.myUid() }
         else emptyList()
+
+        // Apps that block capture (Spotify, for one) can be on the list, but
+        // Android will never hand us their audio, and muting them only silences
+        // them, so they are left out and play unprocessed. If that leaves the
+        // list with nothing we can process, the mode is set aside rather than
+        // honoured: capturing only uncapturable apps processes nothing at all,
+        // while every other app plays untouched. That reads as "no effects
+        // anywhere" with no hint why, which is exactly how it was reported.
+        val restricted = if (excludeRestrictedSessions)
+            sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet()
+        else emptySet()
+        val allowed = listed.filter {
+            it !in restricted && !sessionManager.sessionDatabase.isUncapturableUid(it)
+        }
+        if (listed.isNotEmpty() && allowed.isEmpty()) {
+            Timber.w("buildAudioRecord: every app on the Included apps list blocks capture " +
+                    "(${listed.joinToString("; ")}); processing all apps instead")
+            if (!warnedEmptyAllowlist) {
+                warnedEmptyAllowlist = true
+                Handler(Looper.getMainLooper()).post {
+                    toast(getString(R.string.rootless_allowlist_uncapturable), false)
+                }
+            }
+        }
+
         if (allowed.isNotEmpty()) {
             allowed.forEach { configBuilder.addMatchingUid(it) }
 
-            // Apps that block capture (Spotify, for one) can be on the list,
-            // but Android will never hand us their audio. Muting them anyway
-            // just silences them, so leave them alone and let them play
-            // unprocessed, as the ordinary path does. They stay in the capture
-            // match: it gets nothing from them, and dropping them could leave
-            // the match empty, which Android reads as "capture everything".
-            val restricted = if (excludeRestrictedSessions)
-                sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet()
-            else emptySet()
-            val muted = allowed.filter { it !in restricted }
-
-            sessionManager.sessionDatabase.setAllowedUids(muted.toTypedArray())
-            sessionManager.sessionDatabase.setExcludedUids(restricted.toTypedArray())
+            sessionManager.sessionDatabase.setAllowedUids(allowed.toTypedArray())
+            sessionManager.sessionDatabase.setExcludedUids(arrayOf())
             sessionManager.pollOnce(false)
             Timber.d("buildAudioRecord: Allowed UIDs only: ${allowed.joinToString("; ")}; " +
-                    "left unmuted as restricted: ${allowed.filter { it in restricted }.joinToString("; ")}")
+                    "left unmuted as uncapturable: ${listed.filter { it !in allowed }.joinToString("; ")}")
         }
         else {
             val excluded = (if(excludeRestrictedSessions)
@@ -741,6 +838,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 blockedApps.value?.map { it.uid }?.let {
                     excluded += it
                 }
+            // Same reason as above: an app we cannot capture must not be muted
+            excluded += listed.filter { it !in excluded && sessionManager.sessionDatabase.isUncapturableUid(it) }
             excluded += Process.myUid()
 
             excluded.forEach { configBuilder.excludeUid(it) }
@@ -774,6 +873,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+        const val IDLE_REPOLL_MS = 2000L
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".rootless.service.STOP"

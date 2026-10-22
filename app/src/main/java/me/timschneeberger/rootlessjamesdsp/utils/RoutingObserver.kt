@@ -4,9 +4,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Resources
+import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.StringRes
 import androidx.core.content.getSystemService
 import androidx.mediarouter.media.MediaControlIntent
@@ -35,6 +39,58 @@ class RoutingObserver(val context: Context) : MediaRouter.Callback(), KoinCompon
 
     private val AudioDeviceInfo.deviceGroup: DeviceGroup
         get() = DeviceGroup.from(type)
+
+    private val audioManager by lazy { context.getSystemService<AudioManager>()!! }
+
+    private val mediaAttributes by lazy {
+        AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+    }
+
+    // MediaRouter only reports a route change when the user-visible route
+    // changes. A device that connects and drops in the background (a watch
+    // that briefly takes the Bluetooth link) can leave the selected route and
+    // the real output disagreeing, and nothing calls back when it goes away.
+    // Listening to the device list directly closes that gap.
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refresh()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refresh()
+    }
+
+    private val AudioDeviceInfo.asDevice: Device
+        get() = Device(productName.toString(), address, deviceGroup)
+
+    /**
+     * The device media is actually playing on right now. Android 13 can answer
+     * that directly; before that, the selected route is matched against the
+     * connected outputs, which is the best older versions offer.
+     */
+    private fun resolveCurrentDevice(): Device? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                audioManager.getAudioDevicesForAttributes(mediaAttributes)
+                    .firstOrNull { it.isSink }
+                    ?.let { return it.asDevice }
+            }
+            catch (ex: Exception) {
+                Timber.w(ex, "getAudioDevicesForAttributes failed; falling back to the media route")
+            }
+        }
+        return try {
+            router.selectedRoute.findOutputDevice()
+        }
+        catch (ex: Exception) {
+            Timber.w(ex, "Failed to resolve the selected media route")
+            null
+        }
+    }
+
+    /** Re-read the current output; listeners hear about it only if it changed. */
+    fun refresh() {
+        currentDevice = resolveCurrentDevice()
+    }
 
     private fun MediaRouter.RouteInfo.findOutputDevice(): Device? {
         return context.getSystemService<AudioManager>()!!
@@ -124,15 +180,17 @@ class RoutingObserver(val context: Context) : MediaRouter.Callback(), KoinCompon
     }
 
     override fun onRouteSelected(router: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) {
-        currentDevice = route.findOutputDevice()
+        refresh()
     }
 
     override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) {
-        currentDevice = router.selectedRoute.findOutputDevice()
+        refresh()
     }
 
     override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) {
         router.unselect(MediaRouter.UNSELECT_REASON_DISCONNECTED)
+        // Never keep pointing at a device that is gone
+        refresh()
     }
 
     fun retrigger() {
@@ -149,6 +207,10 @@ class RoutingObserver(val context: Context) : MediaRouter.Callback(), KoinCompon
                 this,
                 0
             )
+            audioManager.registerAudioDeviceCallback(deviceCallback, Handler(Looper.getMainLooper()))
+            // Without this the current device stays unknown until the next
+            // route event, which can be never if nothing is plugged or paired
+            refresh()
         }
         callbacks.add(callback)
         currentDevice?.let(callback::onRoutingDeviceChanged)
@@ -160,6 +222,7 @@ class RoutingObserver(val context: Context) : MediaRouter.Callback(), KoinCompon
         if (callbacks.isEmpty()) {
             prefs.unregisterOnSharedPreferenceChangeListener(this)
             router.removeCallback(this)
+            audioManager.unregisterAudioDeviceCallback(deviceCallback)
         }
     }
 
@@ -203,6 +266,9 @@ class RoutingObserver(val context: Context) : MediaRouter.Callback(), KoinCompon
 
 
         override fun toString() = "Device(id=$id, group=$group, name='$name', productName='$productName', address='$address')"
+        // Equal when it is the same output, so re-reading it does not count as a change
+        override fun equals(other: Any?) = other is Device && other.id == id && other.name == name
+        override fun hashCode() = id.hashCode()
         private fun hasProductName(): Boolean {
             // Special case: you can connect two phones of the same model name via bluetooth
             return (productName != Build.MODEL || group == DeviceGroup.BLUETOOTH) && productName.isNotEmpty()
